@@ -8,7 +8,7 @@ import {
 import IdAlloc from "./id_alloc.js";
 import type * as proto from "./proto.js";
 
-export type { Stmt, Value, StmtResult, RowArray, Row } from "./convert";
+export type { Stmt, StmtArgs, Value, StmtResult, RowArray, Row } from "./convert";
 export type { proto };
 
 /** Open a Hrana client connected to the given `url`. */
