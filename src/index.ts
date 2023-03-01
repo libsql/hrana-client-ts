@@ -5,10 +5,12 @@ import {
     stmtToProto, rowArrayFromProto, rowFromProto,
     stmtResultFromProto, valueFromProto, errorFromProto,
 } from "./convert.js";
+import { ClientError, ProtoError, ClosedError } from "./errors.js";
 import IdAlloc from "./id_alloc.js";
 import type * as proto from "./proto.js";
 
-export type { Stmt, StmtArgs, Value, StmtResult, RowArray, Row } from "./convert";
+export type { Stmt, StmtArgs, Value, StmtResult, RowArray, Row } from "./convert.js";
+export * from "./errors.js";
 export type { proto };
 
 /** Open a Hrana client connected to the given `url`. */
@@ -58,7 +60,7 @@ export class Client {
     // Send (or enqueue to send) a message to the server.
     #send(msg: proto.ClientMsg): void {
         if (this.#closed !== undefined) {
-            throw new Error("Internal error: trying to send a message on a closed client");
+            throw new ClientError("Internal error: trying to send a message on a closed client");
         }
 
         if (this.#socket.readyState >= WebSocket.OPEN) {
@@ -91,12 +93,12 @@ export class Client {
     #onSocketError(event: Event | WebSocket.ErrorEvent): void {
         const eventMessage = (event as {message?: string}).message;
         const message = eventMessage ?? "Connection was closed due to an error";
-        this.#setClosed(new Error(message));
+        this.#setClosed(new ClientError(message));
     }
 
     // The socket was closed.
     #onSocketClose(event: WebSocket.CloseEvent): void {
-        this.#setClosed(new Error(`WebSocket was closed with code ${event.code}: ${event.reason}`));
+        this.#setClosed(new ClientError(`WebSocket was closed with code ${event.code}: ${event.reason}`));
     }
 
     // Close the client with the given error.
@@ -119,7 +121,7 @@ export class Client {
     #onSocketMessage(event: WebSocket.MessageEvent): void {
         if (typeof event.data !== "string") {
             this.#socket.close(3003, "Only string messages are accepted");
-            this.#setClosed(new Error("Received non-string message from server"))
+            this.#setClosed(new ProtoError("Received non-string message from server"))
             return;
         }
 
@@ -137,7 +139,7 @@ export class Client {
 
         if (msg["type"] === "hello_ok" || msg["type"] === "hello_error") {
             if (this.#recvdHello) {
-                throw new Error("Received a duplicated hello response");
+                throw new ProtoError("Received a duplicated hello response");
             }
             this.#recvdHello = true;
 
@@ -146,7 +148,7 @@ export class Client {
             }
             return;
         } else if (!this.#recvdHello) {
-            throw new Error("Received a non-hello message before a hello response");
+            throw new ProtoError("Received a non-hello message before a hello response");
         }
 
         if (msg["type"] === "response_ok") {
@@ -155,9 +157,9 @@ export class Client {
             this.#responseMap.delete(requestId);
 
             if (responseState === undefined) {
-                throw new Error("Received unexpected OK response");
+                throw new ProtoError("Received unexpected OK response");
             } else if (responseState.type !== msg["response"]["type"]) {
-                throw new Error("Received unexpected type of response");
+                throw new ProtoError("Received unexpected type of response");
             }
 
             try {
@@ -172,18 +174,18 @@ export class Client {
             this.#responseMap.delete(requestId);
 
             if (responseState === undefined) {
-                throw new Error("Received unexpected error response");
+                throw new ProtoError("Received unexpected error response");
             }
             responseState.errorCallback(errorFromProto(msg["error"]));
         } else {
-            throw new Error("Received unexpected message type");
+            throw new ProtoError("Received unexpected message type");
         }
     }
 
     /** Open a {@link Stream}, a stream for executing SQL statements. */
     openStream(): Stream {
         if (this.#closed !== undefined) {
-            throw new Error("Client is closed", {cause: this.#closed});
+            throw new ClosedError("Client is closed", this.#closed);
         }
 
         const streamId = this.#streamIdAlloc.alloc();
@@ -234,10 +236,10 @@ export class Client {
         }
 
         if (streamState.closed !== undefined) {
-            errorCallback(new Error("Stream was closed", {cause: streamState.closed}));
+            errorCallback(new ClosedError("Stream was closed", streamState.closed));
             return;
         } else if (this.#closed !== undefined) {
-            errorCallback(new Error("Client was closed", {cause: this.#closed}));
+            errorCallback(new ClosedError("Client was closed", this.#closed));
             return;
         }
 
@@ -251,7 +253,7 @@ export class Client {
 
     /** Close the client and the WebSocket. */
     close() {
-        this.#setClosed(new Error("Client was manually closed"));
+        this.#setClosed(new ClientError("Client was manually closed"));
     }
 }
 
@@ -353,7 +355,7 @@ export class Stream {
 
     /** Close the stream. */
     close(): void {
-        this.#client._closeStream(this.#state, new Error("Stream was manually closed"));
+        this.#client._closeStream(this.#state, new ClientError("Stream was manually closed"));
     }
 }
 

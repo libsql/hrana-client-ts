@@ -9,6 +9,9 @@ import tempfile
 
 import websockets
 
+class ResponseError(RuntimeError):
+    pass
+
 async def main():
     server = await websockets.serve(handle_socket, "localhost", 2023, subprotocols=["hrana1"])
     for sock in server.sockets:
@@ -71,7 +74,10 @@ async def handle_socket(websocket):
         else:
             raise RuntimeError(f"Using both positional and named arguments is not supported")
 
-        cursor = conn.execute(stmt["sql"], sql_args)
+        try:
+            cursor = conn.execute(stmt["sql"], sql_args)
+        except sqlite3.OperationalError as e:
+            raise ResponseError(str(e))
         cols = [{"name": name} for name, *_ in cursor.description or []]
 
         rows = []
@@ -115,12 +121,19 @@ async def handle_socket(websocket):
 
     async def handle_msg(msg):
         if msg["type"] == "request":
-            response = await handle_request(msg["request"])
-            await send_msg({
-                "type": "response_ok",
-                "request_id": msg["request_id"],
-                "response": response,
-            })
+            try:
+                response = await handle_request(msg["request"])
+                await send_msg({
+                    "type": "response_ok",
+                    "request_id": msg["request_id"],
+                    "response": response,
+                })
+            except ResponseError as e:
+                await send_msg({
+                    "type": "response_error",
+                    "request_id": msg["request_id"],
+                    "error": {"message": str(e)},
+                })
         else:
             raise RuntimeError(f"Unknown msg: {msg!r}")
 

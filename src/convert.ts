@@ -1,4 +1,5 @@
 import type * as proto from "./proto.js";
+import { ClientError, ProtoError, ResponseError } from "./errors.js";
 
 /** A statement that you can send to the database. Either a plain SQL string, or an SQL string together with
  * values for the `?` parameters.
@@ -44,7 +45,7 @@ export function valueToProto(value: Value): proto.Value {
     } else if (typeof value === "number") {
         return {"type": "float", "value": +value};
     } else if (value instanceof ArrayBuffer) {
-        throw new Error("ArrayBuffer is not yet supported");
+        throw new ClientError("ArrayBuffer is not yet supported");
     } else {
         return {"type": "text", "value": ""+value};
     }
@@ -60,9 +61,9 @@ export function valueFromProto(value: proto.Value): Value {
     } else if (value["type"] === "text") {
         return value["value"];
     } else if (value["type"] === "blob") {
-        throw new Error("blob is not yet supported");
+        throw new ClientError("blob is not yet supported");
     } else {
-        throw new Error("Unexpected value type");
+        throw new ProtoError("Unexpected value type");
     }
 }
 
@@ -107,7 +108,7 @@ export class RowArray extends Array<Row> implements StmtResult {
 
 export type Row = any;
 
-export function errorFromProto(error: proto.Error): Error {
-    return new Error(`Server returned error ${JSON.stringify(error["message"])}`);
+export function errorFromProto(error: proto.Error): ResponseError {
+    return new ResponseError(error["message"], error);
 }
 
