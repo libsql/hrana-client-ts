@@ -5,19 +5,30 @@ import type * as proto from "./proto.js";
  */
 export type Stmt =
     | string
-    | [string, Array<Value>];
+    | [string, StmtArgs];
 
-export function stmtToProto(stmtLike: Stmt, wantRows: boolean): proto.Stmt {
+/** Arguments for a statement. Either an array that is bound to parameters by position, or an object with
+* values that are bound to parameters by name. */
+export type StmtArgs = Array<Value> | Record<string, Value>;
+
+export function stmtToProto(stmt: Stmt, wantRows: boolean): proto.Stmt {
     let sql;
     let args: Array<proto.Value> = [];
-    if (typeof stmtLike === "string") {
-        sql = stmtLike;
+    let namedArgs: Array<proto.NamedArg> = [];
+    if (typeof stmt === "string") {
+        sql = stmt;
     } else {
-        sql = stmtLike[0];
-        args = stmtLike[1].map(valueToProto);
+        sql = stmt[0];
+        if (Array.isArray(stmt[1])) {
+            args = stmt[1].map(valueToProto);
+        } else {
+            namedArgs = Object.entries(stmt[1]).map((entry) => {
+                const [key, value] = entry;
+                return {"name": key, "value": valueToProto(value)};
+            });
+        }
     }
-
-    return {"sql": sql, "args": args, "want_rows": wantRows};
+    return {"sql": sql, "args": args, "named_args": namedArgs, "want_rows": wantRows};
 }
 
 /** JavaScript values that you can get from the database. */

@@ -107,8 +107,14 @@ export type ExecuteResp = {
 
 export type Stmt = {
     "sql": string,
-    "args": Array<Value>,
+    "args"?: Array<Value>,
+    "named_args"?: Array<NamedArg>,
     "want_rows": boolean,
+}
+
+export type NamedArg = {
+    "name": string,
+    "value": Value,
 }
 
 export type StmtResult = {

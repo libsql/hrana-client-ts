@@ -118,6 +118,22 @@ test("Stream.executeRaw()", withClient(async (c) => {
     ]);
 }));
 
+test("positional args", withClient(async (c) => {
+    const s = c.openStream();
+    const row = await s.queryRow(["SELECT ?, ?3, ?2", ['one', null, 3]]);
+    expect(row[0]).toStrictEqual('one');
+    expect(row[1]).toStrictEqual(3);
+    expect(row[2]).toStrictEqual(null);
+}));
+
+test("named args", withClient(async (c) => {
+    const s = c.openStream();
+    const row = await s.queryRow(["SELECT :one, @two, $three", {":one": 10, "two": 20, "$three": 30}]);
+    expect(row[0]).toStrictEqual(10);
+    expect(row[1]).toStrictEqual(20);
+    expect(row[2]).toStrictEqual(30);
+}));
+
 test("concurrent streams are separate", withClient(async (c) => {
     const s1 = c.openStream();
     await s1.execute("DROP TABLE IF EXISTS t");
