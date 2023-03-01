@@ -55,8 +55,23 @@ async def handle_socket(websocket):
             raise RuntimeError(f"Unknown req: {req!r}")
 
     def execute_stmt(conn, stmt):
-        params = [value_to_sqlite(arg) for arg in stmt["args"]]
-        cursor = conn.execute(stmt["sql"], params)
+        args = stmt.get("args", [])
+        named_args = stmt.get("named_args", [])
+        if len(named_args) == 0:
+            sql_args = [value_to_sqlite(arg) for arg in args]
+        elif len(args) == 0:
+            sql_args = {}
+            for arg in named_args:
+                value = value_to_sqlite(arg["value"])
+                if arg["name"][0] in (":", "@", "$"):
+                    key = arg["name"][1:]
+                else:
+                    key = arg["name"]
+                sql_args[key] = value
+        else:
+            raise RuntimeError(f"Using both positional and named arguments is not supported")
+
+        cursor = conn.execute(stmt["sql"], sql_args)
         cols = [{"name": name} for name, *_ in cursor.description or []]
 
         rows = []
