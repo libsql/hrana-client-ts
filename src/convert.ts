@@ -68,11 +68,14 @@ export function valueFromProto(value: proto.Value): Value {
 }
 
 export function stmtResultFromProto(result: proto.StmtResult): StmtResult {
-    return {rowsAffected: result["affected_row_count"]};
+    return {
+        rowsAffected: result["affected_row_count"],
+        columnNames: result["cols"].map(col => col.name),
+    };
 }
 
 export function rowArrayFromProto(result: proto.StmtResult): RowArray {
-    const array = new RowArray(result["affected_row_count"]);
+    const array = new RowArray(stmtResultFromProto(result));
     for (const row of result["rows"]) {
         array.push(rowFromProto(result, row));
     }
@@ -97,11 +100,17 @@ export function rowFromProto(result: proto.StmtResult, row: Array<proto.Value>):
 
 export interface StmtResult {
     rowsAffected: number;
+    columnNames: Array<string | null>;
 }
 
 export class RowArray extends Array<Row> implements StmtResult {
-    constructor(public rowsAffected: number) {
+    rowsAffected: number;
+    columnNames: Array<string | null>;
+
+    constructor(result: StmtResult) {
         super();
+        this.rowsAffected = result.rowsAffected;
+        this.columnNames = result.columnNames;
         Object.setPrototypeOf(this, RowArray.prototype);
     }
 }

@@ -139,6 +139,16 @@ test("response error", withClient(async (c) => {
     await expect(s.queryValue("SELECT")).rejects.toBeInstanceOf(hrana.ResponseError);
 }));
 
+test("column names", withClient(async (c) => {
+    const s = c.openStream();
+
+    const rows = await s.query("SELECT 1 AS one, 2 AS two");
+    expect(rows.columnNames).toStrictEqual(["one", "two"]);
+
+    const res = await s.execute("SELECT 1 AS one, 2 AS two");
+    expect(res.columnNames).toStrictEqual(["one", "two"]);
+}));
+
 test("concurrent streams are separate", withClient(async (c) => {
     const s1 = c.openStream();
     await s1.execute("DROP TABLE IF EXISTS t");
