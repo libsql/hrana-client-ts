@@ -134,6 +134,31 @@ test("named args", withClient(async (c) => {
     expect(row[2]).toStrictEqual(30);
 }));
 
+test("blob as argument", withClient(async (c) => {
+    const s = c.openStream();
+    const res = await s.queryValue(["SELECT length(?)", [new ArrayBuffer(42)]]);
+    expect(res).toStrictEqual(42);
+}));
+
+test("blob as result", withClient(async (c) => {
+    const s = c.openStream();
+    const res = await s.queryValue("SELECT randomblob(38)");
+    expect(res).toBeInstanceOf(ArrayBuffer);
+    expect((res as ArrayBuffer).byteLength).toStrictEqual(38);
+}));
+
+test("blob roundtrip", withClient(async (c) => {
+    const sendBuf = new ArrayBuffer(256);
+    const sendArray = new Uint8Array(sendBuf);
+    for (let i = 0; i < 256; ++i) {
+        sendArray[i] = i;
+    }
+
+    const s = c.openStream();
+    const recvBuf = await s.queryValue(["SELECT ?", [sendBuf]]);
+    expect(recvBuf).toStrictEqual(sendBuf);
+}));
+
 test("response error", withClient(async (c) => {
     const s = c.openStream();
     await expect(s.queryValue("SELECT")).rejects.toBeInstanceOf(hrana.ResponseError);

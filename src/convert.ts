@@ -1,3 +1,5 @@
+import { Base64 } from "js-base64";
+
 import type * as proto from "./proto.js";
 import { ClientError, ProtoError, ResponseError } from "./errors.js";
 
@@ -45,7 +47,7 @@ export function valueToProto(value: Value): proto.Value {
     } else if (typeof value === "number") {
         return {"type": "float", "value": +value};
     } else if (value instanceof ArrayBuffer) {
-        throw new ClientError("ArrayBuffer is not yet supported");
+        return {"type": "blob", "base64": Base64.fromUint8Array(new Uint8Array(value))};
     } else {
         return {"type": "text", "value": ""+value};
     }
@@ -61,7 +63,7 @@ export function valueFromProto(value: proto.Value): Value {
     } else if (value["type"] === "text") {
         return value["value"];
     } else if (value["type"] === "blob") {
-        throw new ClientError("blob is not yet supported");
+        return Base64.toUint8Array(value["base64"]).buffer;
     } else {
         throw new ProtoError("Unexpected value type");
     }
