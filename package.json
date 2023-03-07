@@ -28,6 +28,10 @@
       "require": "./lib-cjs/index.js"
     }
   },
+  "files": [
+    "lib-cjs/**",
+    "lib-esm/**"
+  ],
 
   "scripts": {
     "prebuild": "rm -rf ./lib-cjs ./lib-esm",
@@ -38,11 +42,6 @@
 
     "test": "jest"
   },
-
-  "files": [
-    "lib-cjs/**",
-    "lib-esm/**"
-  ],
 
   "dependencies": {
     "isomorphic-ws": "^5.0.0",
