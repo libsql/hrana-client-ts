@@ -2,7 +2,7 @@ import * as hrana from "..";
 
 function withClient(f: (c: hrana.Client) => Promise<void>): () => Promise<void> {
     return async () => {
-        const c = hrana.open(process.env.URL ?? "ws://localhost:2023");
+        const c = hrana.open(process.env.URL ?? "ws://localhost:2023", process.env.JWT);
         try {
             await f(c);
         } finally {
