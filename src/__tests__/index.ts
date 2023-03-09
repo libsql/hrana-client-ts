@@ -134,20 +134,51 @@ test("named args", withClient(async (c) => {
     expect(row[2]).toStrictEqual(30);
 }));
 
-test("blob as argument", withClient(async (c) => {
+test("Stmt without arguments", withClient(async (c) => {
+    const s = c.openStream();
+    const res = await s.queryValue(new hrana.Stmt("SELECT 1"));
+    expect(res).toStrictEqual(1);
+}));
+
+test("Stmt.bindIndexes()", withClient(async (c) => {
+    const s = c.openStream();
+    const res = await s.queryValue(new hrana.Stmt("SELECT ? || ?").bindIndexes(["a", "b"]));
+    expect(res).toStrictEqual("ab");
+}));
+
+test("Stmt.bindIndex()", withClient(async (c) => {
+    const s = c.openStream();
+    const row = await s.queryRow(new hrana.Stmt("SELECT ?, ?").bindIndex(2, "b"));
+    expect(row[0]).toStrictEqual(null);
+    expect(row[1]).toStrictEqual("b");
+}));
+
+test("Stmt.bindName()", withClient(async (c) => {
+    const s = c.openStream();
+    const res = await s.queryValue(new hrana.Stmt("SELECT $x").bindName("x", 10));
+    expect(res).toStrictEqual(10);
+}));
+
+test("ArrayBuffer as argument", withClient(async (c) => {
     const s = c.openStream();
     const res = await s.queryValue(["SELECT length(?)", [new ArrayBuffer(42)]]);
     expect(res).toStrictEqual(42);
 }));
 
-test("blob as result", withClient(async (c) => {
+test("Uint8Array as argument", withClient(async (c) => {
+    const s = c.openStream();
+    const res = await s.queryValue(["SELECT length(?)", [new Uint8Array(42)]]);
+    expect(res).toStrictEqual(42);
+}));
+
+test("ArrayBuffer as result", withClient(async (c) => {
     const s = c.openStream();
     const res = await s.queryValue("SELECT randomblob(38)");
     expect(res).toBeInstanceOf(ArrayBuffer);
     expect((res as ArrayBuffer).byteLength).toStrictEqual(38);
 }));
 
-test("blob roundtrip", withClient(async (c) => {
+test("ArrayBuffer roundtrip", withClient(async (c) => {
     const sendBuf = new ArrayBuffer(256);
     const sendArray = new Uint8Array(sendBuf);
     for (let i = 0; i < 256; ++i) {
@@ -157,6 +188,23 @@ test("blob roundtrip", withClient(async (c) => {
     const s = c.openStream();
     const recvBuf = await s.queryValue(["SELECT ?", [sendBuf]]);
     expect(recvBuf).toStrictEqual(sendBuf);
+}));
+
+test("bigint as argument", withClient(async (c) => {
+    const s = c.openStream();
+    const res = await s.queryValue(["SELECT ?", [-123n]]);
+    expect(res).toStrictEqual("-123");
+}));
+
+test("protocol value as argument", withClient(async (c) => {
+    const s = c.openStream();
+    const res = await s.queryValue(["SELECT ?", [{"type": "text", "value": "Homo sapiens"}]]);
+    expect(res).toStrictEqual("Homo sapiens");
+}));
+
+test("unsafe integer", withClient(async (c) => {
+    const s = c.openStream();
+    await expect(s.queryValue("SELECT 9007199254740992")).rejects.toBeInstanceOf(RangeError);
 }));
 
 test("response error", withClient(async (c) => {

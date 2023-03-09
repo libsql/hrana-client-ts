@@ -1,6 +1,6 @@
 import WebSocket from "isomorphic-ws";
 
-import type { Stmt, Value, StmtResult, RowArray, Row } from "./convert.js";
+import type { InStmt, InValue, OutValue, StmtResult, RowArray, Row } from "./convert.js";
 import {
     stmtToProto, rowArrayFromProto, rowFromProto,
     stmtResultFromProto, valueFromProto, errorFromProto,
@@ -9,7 +9,8 @@ import { ClientError, ProtoError, ClosedError } from "./errors.js";
 import IdAlloc from "./id_alloc.js";
 import type * as proto from "./proto.js";
 
-export type { Stmt, StmtArgs, Value, StmtResult, RowArray, Row } from "./convert.js";
+export type { InStmt, InStmtArgs, OutValue, InValue, StmtResult, Row } from "./convert.js";
+export { Stmt, RowArray } from "./convert.js";
 export * from "./errors.js";
 export type { proto };
 
@@ -296,7 +297,7 @@ export class Stream {
     }
 
     /** Execute a statement that returns rows. */
-    query(stmt: Stmt): Promise<RowArray> {
+    query(stmt: InStmt): Promise<RowArray> {
         return new Promise((rowsCallback, errorCallback) => {
             this.#client._execute(this.#state, {
                 stmt: stmtToProto(stmt, true),
@@ -309,7 +310,7 @@ export class Stream {
     }
 
     /** Execute a statement that returns at most a single row. */
-    queryRow(stmt: Stmt): Promise<Row | undefined> {
+    queryRow(stmt: InStmt): Promise<Row | undefined> {
         return new Promise((rowCallback, errorCallback) => {
             this.#client._execute(this.#state, {
                 stmt: stmtToProto(stmt, true),
@@ -326,7 +327,7 @@ export class Stream {
     }
 
     /** Execute a statement that returns at most a single value. */
-    queryValue(stmt: Stmt): Promise<Value | undefined> {
+    queryValue(stmt: InStmt): Promise<OutValue | undefined> {
         return new Promise((valueCallback, errorCallback) => {
             this.#client._execute(this.#state, {
                 stmt: stmtToProto(stmt, true),
@@ -343,7 +344,7 @@ export class Stream {
     }
 
     /** Execute a statement that does not return rows. */
-    execute(stmt: Stmt): Promise<StmtResult> {
+    execute(stmt: InStmt): Promise<StmtResult> {
         return new Promise((doneCallback, errorCallback) => {
             this.#client._execute(this.#state, {
                 stmt: stmtToProto(stmt, false),
