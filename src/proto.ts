@@ -121,6 +121,7 @@ export type StmtResult = {
     "cols": Array<Col>,
     "rows": Array<Array<Value>>,
     "affected_row_count": number,
+    "last_insert_rowid"?: string | null,
 }
 
 export type Col = {

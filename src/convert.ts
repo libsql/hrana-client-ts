@@ -72,6 +72,7 @@ export function valueFromProto(value: proto.Value): Value {
 export function stmtResultFromProto(result: proto.StmtResult): StmtResult {
     return {
         rowsAffected: result["affected_row_count"],
+        lastInsertRowid: result["last_insert_rowid"] ?? null,
         columnNames: result["cols"].map(col => col.name),
     };
 }
@@ -102,16 +103,19 @@ export function rowFromProto(result: proto.StmtResult, row: Array<proto.Value>):
 
 export interface StmtResult {
     rowsAffected: number;
+    lastInsertRowid: string | null;
     columnNames: Array<string | null>;
 }
 
 export class RowArray extends Array<Row> implements StmtResult {
     rowsAffected: number;
+    lastInsertRowid: string | null;
     columnNames: Array<string | null>;
 
     constructor(result: StmtResult) {
         super();
         this.rowsAffected = result.rowsAffected;
+        this.lastInsertRowid = result.lastInsertRowid;
         this.columnNames = result.columnNames;
         Object.setPrototypeOf(this, RowArray.prototype);
     }

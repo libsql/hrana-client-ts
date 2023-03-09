@@ -164,6 +164,23 @@ test("response error", withClient(async (c) => {
     await expect(s.queryValue("SELECT")).rejects.toBeInstanceOf(hrana.ResponseError);
 }));
 
+test("last insert rowid", withClient(async (c) => {
+    const s = c.openStream();
+
+    await s.execute("BEGIN");
+    await s.execute("DROP TABLE IF EXISTS t");
+    await s.execute("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+
+    let res = await s.execute("INSERT INTO t VALUES (123)");
+    expect(res.lastInsertRowid).toStrictEqual("123");
+
+    res = await s.execute("INSERT INTO t VALUES (9223372036854775807)");
+    expect(res.lastInsertRowid).toStrictEqual("9223372036854775807");
+
+    res = await s.execute("INSERT INTO t VALUES (-9223372036854775808)");
+    expect(res.lastInsertRowid).toStrictEqual("-9223372036854775808");
+}));
+
 test("column names", withClient(async (c) => {
     const s = c.openStream();
 

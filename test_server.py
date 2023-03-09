@@ -89,7 +89,18 @@ async def handle_socket(websocket):
             affected_row_count = cursor.rowcount
         else:
             affected_row_count = 0
-        return {"cols": cols, "rows": rows, "affected_row_count": affected_row_count}
+
+        if cursor.lastrowid is not None:
+            last_insert_rowid = str(cursor.lastrowid)
+        else:
+            last_insert_rowid = None
+
+        return {
+            "cols": cols,
+            "rows": rows,
+            "affected_row_count": affected_row_count,
+            "last_insert_rowid": last_insert_rowid,
+        }
 
     def value_to_sqlite(value):
         if value["type"] == "null":
