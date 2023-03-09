@@ -115,7 +115,7 @@ async def handle_socket(websocket):
         elif isinstance(value, str):
             return {"type": "text", "value": value}
         elif isinstance(value, bytes):
-            return {"type": "blob", "value": base64.b64encode(value)}
+            return {"type": "blob", "base64": base64.b64encode(value).decode()}
         else:
             raise RuntimeError(f"Unknown SQLite value: {value!r}")
 
