@@ -1,17 +1,25 @@
 import WebSocket from "isomorphic-ws";
 
-import type { InStmt, InValue, OutValue, StmtResult, RowArray, Row } from "./convert.js";
-import {
-    stmtToProto, rowArrayFromProto, rowFromProto,
-    stmtResultFromProto, valueFromProto, errorFromProto,
-} from "./convert.js";
 import { ClientError, ProtoError, ClosedError } from "./errors.js";
 import IdAlloc from "./id_alloc.js";
 import type * as proto from "./proto.js";
+import type { StmtResult, RowResult, ValueResult } from "./result.js";
+import {
+    RowArrayResult,
+    rowArrayResultFromProto, rowResultFromProto,
+    valueResultFromProto, stmtResultFromProto,
+    errorFromProto,
+} from "./result.js";
+import type { InStmt } from "./stmt.js";
+import { stmtToProto } from "./stmt.js";
+import type { InValue } from "./value.js";
 
-export type { InStmt, InStmtArgs, OutValue, InValue, StmtResult, Row } from "./convert.js";
-export { Stmt, RowArray } from "./convert.js";
 export * from "./errors.js";
+export type { StmtResult, RowResult, ValueResult, Row } from "./result.js";
+export { RowArrayResult } from "./result.js";
+export type { InStmt, InStmtArgs } from "./stmt.js";
+export { Stmt } from "./stmt.js";
+export type { Value, InValue } from "./value.js";
 export type { proto };
 
 /** Open a Hrana client connected to the given `url`. */
@@ -296,54 +304,40 @@ export class Stream {
         });
     }
 
-    /** Execute a statement that returns rows. */
-    query(stmt: InStmt): Promise<RowArray> {
+    /** Execute a statement and return rows. */
+    query(stmt: InStmt): Promise<RowArrayResult> {
         return new Promise((rowsCallback, errorCallback) => {
             this.#client._execute(this.#state, {
                 stmt: stmtToProto(stmt, true),
-                resultCallback(result) {
-                    rowsCallback(rowArrayFromProto(result))
-                },
+                resultCallback(result) { rowsCallback(rowArrayResultFromProto(result)); },
                 errorCallback,
             });
         });
     }
 
-    /** Execute a statement that returns at most a single row. */
-    queryRow(stmt: InStmt): Promise<Row | undefined> {
+    /** Execute a statement and return at most a single row. */
+    queryRow(stmt: InStmt): Promise<RowResult> {
         return new Promise((rowCallback, errorCallback) => {
             this.#client._execute(this.#state, {
                 stmt: stmtToProto(stmt, true),
-                resultCallback(result) {
-                    if (result.rows.length >= 1) {
-                        rowCallback(rowFromProto(result, result.rows[0]));
-                    } else {
-                        rowCallback(undefined);
-                    }
-                },
+                resultCallback(result) { rowCallback(rowResultFromProto(result)); },
                 errorCallback,
             });
         });
     }
 
-    /** Execute a statement that returns at most a single value. */
-    queryValue(stmt: InStmt): Promise<OutValue | undefined> {
+    /** Execute a statement and return at most a single value. */
+    queryValue(stmt: InStmt): Promise<ValueResult> {
         return new Promise((valueCallback, errorCallback) => {
             this.#client._execute(this.#state, {
                 stmt: stmtToProto(stmt, true),
-                resultCallback(result) {
-                    if (result.rows.length >= 1 && result.rows[0].length >= 1) {
-                        valueCallback(valueFromProto(result.rows[0][0]));
-                    } else {
-                        valueCallback(undefined);
-                    }
-                },
+                resultCallback(result) { valueCallback(valueResultFromProto(result)); },
                 errorCallback,
             });
         });
     }
 
-    /** Execute a statement that does not return rows. */
+    /** Execute a statement without returning rows. */
     execute(stmt: InStmt): Promise<StmtResult> {
         return new Promise((doneCallback, errorCallback) => {
             this.#client._execute(this.#state, {
