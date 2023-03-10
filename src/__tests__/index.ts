@@ -16,7 +16,7 @@ test("Stream.queryValue() with value", withClient(async (c) => {
     const res = await s.queryValue("SELECT 1 AS one");
     expect(res.value).toStrictEqual(1);
     expect(res.columnNames).toStrictEqual(["one"]);
-    expect(res.rowsAffected).toStrictEqual(0);
+    expect(res.affectedRowCount).toStrictEqual(0);
 }));
 
 test("Stream.queryValue() without value", withClient(async (c) => {
@@ -24,7 +24,7 @@ test("Stream.queryValue() without value", withClient(async (c) => {
     const res = await s.queryValue("SELECT 1 AS one WHERE 0 = 1");
     expect(res.value).toStrictEqual(undefined);
     expect(res.columnNames).toStrictEqual(["one"]);
-    expect(res.rowsAffected).toStrictEqual(0);
+    expect(res.affectedRowCount).toStrictEqual(0);
 }));
 
 test("Stream.queryRow() with row", withClient(async (c) => {
@@ -33,7 +33,7 @@ test("Stream.queryRow() with row", withClient(async (c) => {
     const res = await s.queryRow(
         "SELECT 1 AS one, 'elephant' AS two, 42.5 AS three, NULL as four");
     expect(res.columnNames).toStrictEqual(["one", "two", "three", "four"]);
-    expect(res.rowsAffected).toStrictEqual(0);
+    expect(res.affectedRowCount).toStrictEqual(0);
 
     const row = res.row as hrana.Row;
     expect(row[0]).toStrictEqual(1);
@@ -53,7 +53,7 @@ test("Stream.queryRow() without row", withClient(async (c) => {
     const res = await s.queryValue("SELECT 1 AS one WHERE 0 = 1");
     expect(res.value).toStrictEqual(undefined);
     expect(res.columnNames).toStrictEqual(["one"]);
-    expect(res.rowsAffected).toStrictEqual(0);
+    expect(res.affectedRowCount).toStrictEqual(0);
 }));
 
 test("Stream.query()", withClient(async (c) => {
@@ -69,7 +69,7 @@ test("Stream.query()", withClient(async (c) => {
     );
 
     const res = await s.query("SELECT * FROM t ORDER BY one");
-    expect(res.rowsAffected).toStrictEqual(0);
+    expect(res.affectedRowCount).toStrictEqual(0);
 
     expect(res.rows.length).toStrictEqual(2);
 
@@ -90,32 +90,32 @@ test("Stream.execute()", withClient(async (c) => {
     const s = c.openStream();
 
     let res = await s.execute("BEGIN");
-    expect(res.rowsAffected).toStrictEqual(0);
+    expect(res.affectedRowCount).toStrictEqual(0);
 
     res = await s.execute("DROP TABLE IF EXISTS t");
-    expect(res.rowsAffected).toStrictEqual(0);
+    expect(res.affectedRowCount).toStrictEqual(0);
 
     res = await s.execute("CREATE TABLE t (num, word)");
-    expect(res.rowsAffected).toStrictEqual(0);
+    expect(res.affectedRowCount).toStrictEqual(0);
 
     res = await s.execute("INSERT INTO t VALUES (1, 'one'), (2, 'two'), (3, 'three')");
-    expect(res.rowsAffected).toStrictEqual(3);
+    expect(res.affectedRowCount).toStrictEqual(3);
     expect(res.lastInsertRowid).toBeDefined();
     expect(res.lastInsertRowid).not.toStrictEqual("0");
 
     const rowsRes = await s.query("SELECT * FROM t ORDER BY num");
     expect(rowsRes.rows.length).toStrictEqual(3);
-    expect(rowsRes.rowsAffected).toStrictEqual(0);
+    expect(rowsRes.affectedRowCount).toStrictEqual(0);
     expect(rowsRes.columnNames).toStrictEqual(["num", "word"]);
 
     res = await s.execute("DELETE FROM t WHERE num >= 2");
-    expect(res.rowsAffected).toStrictEqual(2);
+    expect(res.affectedRowCount).toStrictEqual(2);
 
     res = await s.execute("UPDATE t SET num = 4, word = 'four'");
-    expect(res.rowsAffected).toStrictEqual(1);
+    expect(res.affectedRowCount).toStrictEqual(1);
 
     res = await s.execute("DROP TABLE t");
-    expect(res.rowsAffected).toStrictEqual(0);
+    expect(res.affectedRowCount).toStrictEqual(0);
 
     await s.execute("COMMIT");
 }));

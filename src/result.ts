@@ -5,7 +5,7 @@ import type * as proto from "./proto.js";
 
 export function stmtResultFromProto(result: proto.StmtResult): StmtResult {
     return {
-        rowsAffected: result["affected_row_count"],
+        affectedRowCount: result["affected_row_count"],
         lastInsertRowid: result["last_insert_rowid"] ?? undefined,
         columnNames: result["cols"].map(col => col.name ?? undefined),
     };
@@ -55,7 +55,7 @@ function rowFromProto(colNames: Array<string | undefined>, values: Array<proto.V
 export interface StmtResult {
     /** Number of rows that were changed by the statement. This is meaningful only if the statement was an
      * INSERT, UPDATE or DELETE, and the value is otherwise undefined. */
-    rowsAffected: number;
+    affectedRowCount: number;
     /** The ROWID of the last successful insert into a rowid table. This is a 64-big signed integer encoded as
      * a string. For other statements than INSERTs into a rowid table, the value is not specified. */
     lastInsertRowid: string | undefined;
