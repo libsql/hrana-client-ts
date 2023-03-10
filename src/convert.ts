@@ -106,9 +106,11 @@ export type OutValue =
 /** JavaScript values that you can send to the database as an argument. */
 export type InValue =
     | OutValue
-    | Uint8Array
     | bigint
-    | proto.Value;
+    | Uint8Array
+    | Date
+    | RegExp
+    | object
 
 export function valueToProto(value: InValue): proto.Value {
     if (value === null) {
@@ -123,8 +125,10 @@ export function valueToProto(value: InValue): proto.Value {
         return {"type": "blob", "base64": Base64.fromUint8Array(new Uint8Array(value))};
     } else if (value instanceof Uint8Array) {
         return {"type": "blob", "base64": Base64.fromUint8Array(value)};
-    } else if (typeof value === "object" && typeof value["type"] === "string") {
-        return value;
+    } else if (value instanceof Date) {
+        return {"type": "float", "value": value.valueOf()};
+    } else if (typeof value === "object") {
+        return {"type": "text", "value": value.toString()};
     } else {
         throw new TypeError("Unsupported type of value");
     }

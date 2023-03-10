@@ -196,10 +196,16 @@ test("bigint as argument", withClient(async (c) => {
     expect(res).toStrictEqual("-123");
 }));
 
-test("protocol value as argument", withClient(async (c) => {
+test("Date as argument", withClient(async (c) => {
     const s = c.openStream();
-    const res = await s.queryValue(["SELECT ?", [{"type": "text", "value": "Homo sapiens"}]]);
-    expect(res).toStrictEqual("Homo sapiens");
+    const res = await s.queryValue(["SELECT ?", [new Date(2023, 0)]]);
+    expect(res).toStrictEqual(1672527600000);
+}));
+
+test("RegExp as argument", withClient(async (c) => {
+    const s = c.openStream();
+    const res = await s.queryValue(["SELECT ?", [/.*/]]);
+    expect(res).toStrictEqual("/.*/");
 }));
 
 test("unsafe integer", withClient(async (c) => {
