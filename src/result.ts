@@ -11,13 +11,10 @@ export function stmtResultFromProto(result: proto.StmtResult): StmtResult {
     };
 }
 
-export function rowArrayResultFromProto(result: proto.StmtResult): RowArrayResult {
+export function rowsResultFromProto(result: proto.StmtResult): RowsResult {
     const stmtResult = stmtResultFromProto(result);
-    const array = new RowArrayResult(stmtResult);
-    for (const row of result["rows"]) {
-        array.push(rowFromProto(stmtResult.columnNames, row));
-    }
-    return array;
+    const rows = result["rows"].map(row => rowFromProto(stmtResult.columnNames, row));
+    return {...stmtResult, rows};
 }
 
 export function rowResultFromProto(result: proto.StmtResult): RowResult {
@@ -66,21 +63,10 @@ export interface StmtResult {
     columnNames: Array<string | undefined>;
 }
 
-/** Rows returned by a database statement. This behaves as an `Array` of {@link Row}, and it also has
- * properties from `StmtResult`. */
-export class RowArrayResult extends Array<Row> implements StmtResult {
-    rowsAffected: number;
-    lastInsertRowid: string | undefined;
-    columnNames: Array<string | undefined>;
-
-    /** @private */
-    constructor(result: StmtResult) {
-        super();
-        this.rowsAffected = result.rowsAffected;
-        this.lastInsertRowid = result.lastInsertRowid;
-        this.columnNames = result.columnNames;
-        Object.setPrototypeOf(this, RowArrayResult.prototype);
-    }
+/** An array of rows returned by a database statement. */
+export interface RowsResult extends StmtResult {
+    /** The returned rows. */
+    rows: Array<Row>;
 }
 
 /** A single row returned by a database statement. */

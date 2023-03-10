@@ -3,10 +3,9 @@ import WebSocket from "isomorphic-ws";
 import { ClientError, ProtoError, ClosedError } from "./errors.js";
 import IdAlloc from "./id_alloc.js";
 import type * as proto from "./proto.js";
-import type { StmtResult, RowResult, ValueResult } from "./result.js";
+import type { StmtResult, RowsResult, RowResult, ValueResult } from "./result.js";
 import {
-    RowArrayResult,
-    rowArrayResultFromProto, rowResultFromProto,
+    rowsResultFromProto, rowResultFromProto,
     valueResultFromProto, stmtResultFromProto,
     errorFromProto,
 } from "./result.js";
@@ -15,8 +14,7 @@ import { stmtToProto } from "./stmt.js";
 import type { InValue } from "./value.js";
 
 export * from "./errors.js";
-export type { StmtResult, RowResult, ValueResult, Row } from "./result.js";
-export { RowArrayResult } from "./result.js";
+export type { StmtResult, RowsResult, RowResult, ValueResult, Row } from "./result.js";
 export type { InStmt, InStmtArgs } from "./stmt.js";
 export { Stmt } from "./stmt.js";
 export type { Value, InValue } from "./value.js";
@@ -305,11 +303,11 @@ export class Stream {
     }
 
     /** Execute a statement and return rows. */
-    query(stmt: InStmt): Promise<RowArrayResult> {
+    query(stmt: InStmt): Promise<RowsResult> {
         return new Promise((rowsCallback, errorCallback) => {
             this.#client._execute(this.#state, {
                 stmt: stmtToProto(stmt, true),
-                resultCallback(result) { rowsCallback(rowArrayResultFromProto(result)); },
+                resultCallback(result) { rowsCallback(rowsResultFromProto(result)); },
                 errorCallback,
             });
         });

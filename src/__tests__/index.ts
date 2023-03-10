@@ -68,17 +68,18 @@ test("Stream.query()", withClient(async (c) => {
             (2, 'hippopotamus', '123', 0.0)`
     );
 
-    const rows = await s.query("SELECT * FROM t ORDER BY one");
-    expect(rows.length).toStrictEqual(2);
-    expect(rows.rowsAffected).toStrictEqual(0);
+    const res = await s.query("SELECT * FROM t ORDER BY one");
+    expect(res.rowsAffected).toStrictEqual(0);
 
-    const row0 = rows[0];
+    expect(res.rows.length).toStrictEqual(2);
+
+    const row0 = res.rows[0];
     expect(row0[0]).toStrictEqual(1);
     expect(row0[1]).toStrictEqual("elephant");
     expect(row0["three"]).toStrictEqual(42.5);
     expect(row0["four"]).toStrictEqual(null);
 
-    const row1 = rows[1];
+    const row1 = res.rows[1];
     expect(row1["one"]).toStrictEqual(2);
     expect(row1["two"]).toStrictEqual("hippopotamus");
     expect(row1[2]).toStrictEqual("123");
@@ -102,10 +103,10 @@ test("Stream.execute()", withClient(async (c) => {
     expect(res.lastInsertRowid).toBeDefined();
     expect(res.lastInsertRowid).not.toStrictEqual("0");
 
-    const rows = await s.query("SELECT * FROM t ORDER BY num");
-    expect(rows.length).toStrictEqual(3);
-    expect(rows.rowsAffected).toStrictEqual(0);
-    expect(rows.columnNames).toStrictEqual(["num", "word"]);
+    const rowsRes = await s.query("SELECT * FROM t ORDER BY num");
+    expect(rowsRes.rows.length).toStrictEqual(3);
+    expect(rowsRes.rowsAffected).toStrictEqual(0);
+    expect(rowsRes.columnNames).toStrictEqual(["num", "word"]);
 
     res = await s.execute("DELETE FROM t WHERE num >= 2");
     expect(res.rowsAffected).toStrictEqual(2);
