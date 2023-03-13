@@ -91,6 +91,11 @@ export class Client {
 
     // Send a request to the server and invoke a callback when we get the response.
     #sendRequest(request: proto.Request, callbacks: ResponseCallbacks) {
+        if (this.#closed !== undefined) {
+            callbacks.errorCallback(new ClosedError("Client is closed", this.#closed));
+            return;
+        }
+
         const requestId = this.#requestIdAlloc.alloc();
         this.#responseMap.set(requestId, {...callbacks, type: request.type});
         this.#send({"type": "request", "request_id": requestId, request});
@@ -191,10 +196,6 @@ export class Client {
 
     /** Open a {@link Stream}, a stream for executing SQL statements. */
     openStream(): Stream {
-        if (this.#closed !== undefined) {
-            throw new ClosedError("Client is closed", this.#closed);
-        }
-
         const streamId = this.#streamIdAlloc.alloc();
         const streamState = {
             streamId,
