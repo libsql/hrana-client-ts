@@ -58,7 +58,7 @@ async def handle_socket(websocket):
 
             condition = req.get("condition")
             if condition is not None:
-                condition_passed = is_true(eval_expr(condition))
+                condition_passed = is_truthy(eval_expr(condition))
             else:
                 condition_passed = True
 
@@ -173,10 +173,12 @@ async def handle_socket(websocket):
             return value_to_sqlite(expr)
         elif expr["type"] == "var":
             return compute_vars[expr["var"]]
+        elif expr["type"] == "not":
+            return int(not is_truthy(eval_expr(expr["expr"])))
         else:
             raise RuntimeError(f"Unknown expr: {expr!r}")
 
-    def is_true(value):
+    def is_truthy(value):
         return not not value
 
     async def handle_msg(msg):

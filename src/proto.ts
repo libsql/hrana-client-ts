@@ -160,3 +160,4 @@ export type ComputeOp =
 export type ComputeExpr =
     | Value
     | { "type": "var", "var": int32 }
+    | { "type": "not", "expr": ComputeExpr }

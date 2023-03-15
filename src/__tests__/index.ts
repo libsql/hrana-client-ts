@@ -333,12 +333,14 @@ test("compute a sequence of ops", withClient(async (c) => {
     const compute = c.compute();
     const p1 = compute.enqueue(hrana.Op.set(x, hrana.Expr.value(42)));
     const p2 = compute.enqueue(hrana.Op.eval(hrana.Expr.var_(x)));
-    const p3 = compute.enqueue(hrana.Op.unset(x));
+    const p3 = compute.enqueue(hrana.Op.eval(hrana.Expr.not(hrana.Expr.value(""))));
+    const p4 = compute.enqueue(hrana.Op.unset(x));
     await compute.send();
 
     expect(await p1).toStrictEqual(null);
     expect(await p2).toStrictEqual(42);
-    expect(await p3).toStrictEqual(null);
+    expect(await p3).toStrictEqual(1);
+    expect(await p4).toStrictEqual(null);
 
     c.freeVar(x);
 }));

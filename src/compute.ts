@@ -41,6 +41,10 @@ export class Expr {
     static var_(var_: Var): Expr {
         return new Expr({"type": "var", "var": var_._proto});
     }
+
+    static not(expr: Expr): Expr {
+        return new Expr({"type": "not", "expr": expr._proto});
+    }
 }
 
 export class Var {
