@@ -50,9 +50,30 @@ async def handle_socket(websocket):
             if stream is not None:
                 await asyncio.to_thread(lambda: stream.conn.close())
             return {"type": "close_stream"}
+        elif req["type"] == "compute":
+            results = eval_ops(req["ops"])
+            return {"type": "compute", "results": results}
         elif req["type"] == "execute":
             stream = streams[int(req["stream_id"])]
-            result = await asyncio.to_thread(lambda: execute_stmt(stream.conn, req["stmt"]))
+
+            condition = req.get("condition")
+            if condition is not None:
+                condition_passed = is_true(eval_expr(condition))
+            else:
+                condition_passed = True
+
+            if condition_passed:
+                ops = None
+                try:
+                    result = await asyncio.to_thread(lambda: execute_stmt(stream.conn, req["stmt"]))
+                    ops = req.get("on_ok")
+                except ResponseError:
+                    ops = req.get("on_error")
+                    raise
+                finally:
+                    eval_ops(ops or [])
+            else:
+                result = None
             return {"type": "execute", "result": result}
         else:
             raise RuntimeError(f"Unknown req: {req!r}")
@@ -129,6 +150,34 @@ async def handle_socket(websocket):
             return {"type": "blob", "base64": base64.b64encode(value).decode()}
         else:
             raise RuntimeError(f"Unknown SQLite value: {value!r}")
+
+    compute_vars = {}
+
+    def eval_ops(ops):
+        return [value_from_sqlite(eval_op(op)) for op in ops]
+
+    def eval_op(op):
+        if op["type"] == "set":
+            compute_vars[op["var"]] = eval_expr(op["expr"])
+            return None
+        elif op["type"] == "unset":
+            compute_vars.pop(op["var"], None)
+            return None
+        elif op["type"] == "eval":
+            return eval_expr(op["expr"])
+        else:
+            raise RuntimeError(f"Unknown op: {op!r}")
+
+    def eval_expr(expr):
+        if expr["type"] in ("null", "integer", "float", "text", "blob"):
+            return value_to_sqlite(expr)
+        elif expr["type"] == "var":
+            return compute_vars[expr["var"]]
+        else:
+            raise RuntimeError(f"Unknown expr: {expr!r}")
+
+    def is_true(value):
+        return not not value
 
     async def handle_msg(msg):
         if msg["type"] == "request":

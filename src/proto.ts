@@ -63,11 +63,13 @@ export type Error = {
 export type Request =
     | OpenStreamReq
     | CloseStreamReq
+    | ComputeReq
     | ExecuteReq
 
 export type Response =
     | OpenStreamResp
     | CloseStreamResp
+    | ComputeResp
     | ExecuteResp
 
 // ### Open stream
@@ -92,17 +94,32 @@ export type CloseStreamResp = {
     "type": "close_stream",
 }
 
+// ### Evaluate compute operations
+
+export type ComputeReq = {
+    "type": "compute",
+    "ops": Array<ComputeOp>,
+}
+
+export type ComputeResp = {
+    "type": "compute",
+    "results": Array<Value>,
+}
+
 // ### Execute a statement
 
 export type ExecuteReq = {
     "type": "execute",
     "stream_id": int32,
     "stmt": Stmt,
+    "condition"?: ComputeExpr | null,
+    "on_ok"?: Array<ComputeOp>,
+    "on_error"?: Array<ComputeOp>,
 }
 
 export type ExecuteResp = {
     "type": "execute",
-    "result": StmtResult,
+    "result": StmtResult | null,
 }
 
 export type Stmt = {
@@ -134,3 +151,12 @@ export type Value =
     | { "type": "float", "value": number }
     | { "type": "text", "value": string }
     | { "type": "blob", "base64": string }
+
+export type ComputeOp =
+    | { "type": "set", "var": int32, "expr": ComputeExpr }
+    | { "type": "unset", "var": int32 }
+    | { "type": "eval", "expr": ComputeExpr }
+
+export type ComputeExpr =
+    | Value
+    | { "type": "var", "var": int32 }

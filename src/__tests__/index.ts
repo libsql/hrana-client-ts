@@ -59,10 +59,10 @@ test("Stream.queryRow() without row", withClient(async (c) => {
 test("Stream.query()", withClient(async (c) => {
     const s = c.openStream();
 
-    await s.execute("BEGIN");
-    await s.execute("DROP TABLE IF EXISTS t");
-    await s.execute("CREATE TABLE t (one, two, three, four)");
-    await s.execute(
+    await s.run("BEGIN");
+    await s.run("DROP TABLE IF EXISTS t");
+    await s.run("CREATE TABLE t (one, two, three, four)");
+    await s.run(
         `INSERT INTO t VALUES
             (1, 'elephant', 42.5, NULL),
             (2, 'hippopotamus', '123', 0.0)`
@@ -86,19 +86,19 @@ test("Stream.query()", withClient(async (c) => {
     expect(row1[3]).toStrictEqual(0.0);
 }));
 
-test("Stream.execute()", withClient(async (c) => {
+test("Stream.run()", withClient(async (c) => {
     const s = c.openStream();
 
-    let res = await s.execute("BEGIN");
+    let res = await s.run("BEGIN");
     expect(res.affectedRowCount).toStrictEqual(0);
 
-    res = await s.execute("DROP TABLE IF EXISTS t");
+    res = await s.run("DROP TABLE IF EXISTS t");
     expect(res.affectedRowCount).toStrictEqual(0);
 
-    res = await s.execute("CREATE TABLE t (num, word)");
+    res = await s.run("CREATE TABLE t (num, word)");
     expect(res.affectedRowCount).toStrictEqual(0);
 
-    res = await s.execute("INSERT INTO t VALUES (1, 'one'), (2, 'two'), (3, 'three')");
+    res = await s.run("INSERT INTO t VALUES (1, 'one'), (2, 'two'), (3, 'three')");
     expect(res.affectedRowCount).toStrictEqual(3);
     expect(res.lastInsertRowid).toBeDefined();
     expect(res.lastInsertRowid).not.toStrictEqual("0");
@@ -108,16 +108,16 @@ test("Stream.execute()", withClient(async (c) => {
     expect(rowsRes.affectedRowCount).toStrictEqual(0);
     expect(rowsRes.columnNames).toStrictEqual(["num", "word"]);
 
-    res = await s.execute("DELETE FROM t WHERE num >= 2");
+    res = await s.run("DELETE FROM t WHERE num >= 2");
     expect(res.affectedRowCount).toStrictEqual(2);
 
-    res = await s.execute("UPDATE t SET num = 4, word = 'four'");
+    res = await s.run("UPDATE t SET num = 4, word = 'four'");
     expect(res.affectedRowCount).toStrictEqual(1);
 
-    res = await s.execute("DROP TABLE t");
+    res = await s.run("DROP TABLE t");
     expect(res.affectedRowCount).toStrictEqual(0);
 
-    await s.execute("COMMIT");
+    await s.run("COMMIT");
 }));
 
 test("Stream.executeRaw()", withClient(async (c) => {
@@ -249,17 +249,17 @@ test("response error", withClient(async (c) => {
 test("last insert rowid", withClient(async (c) => {
     const s = c.openStream();
 
-    await s.execute("BEGIN");
-    await s.execute("DROP TABLE IF EXISTS t");
-    await s.execute("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+    await s.run("BEGIN");
+    await s.run("DROP TABLE IF EXISTS t");
+    await s.run("CREATE TABLE t (id INTEGER PRIMARY KEY)");
 
-    let res = await s.execute("INSERT INTO t VALUES (123)");
+    let res = await s.run("INSERT INTO t VALUES (123)");
     expect(res.lastInsertRowid).toStrictEqual("123");
 
-    res = await s.execute("INSERT INTO t VALUES (9223372036854775807)");
+    res = await s.run("INSERT INTO t VALUES (9223372036854775807)");
     expect(res.lastInsertRowid).toStrictEqual("9223372036854775807");
 
-    res = await s.execute("INSERT INTO t VALUES (-9223372036854775808)");
+    res = await s.run("INSERT INTO t VALUES (-9223372036854775808)");
     expect(res.lastInsertRowid).toStrictEqual("-9223372036854775808");
 }));
 
@@ -269,22 +269,22 @@ test("column names", withClient(async (c) => {
     const rows = await s.query("SELECT 1 AS one, 2 AS two");
     expect(rows.columnNames).toStrictEqual(["one", "two"]);
 
-    const res = await s.execute("SELECT 1 AS one, 2 AS two");
+    const res = await s.run("SELECT 1 AS one, 2 AS two");
     expect(res.columnNames).toStrictEqual(["one", "two"]);
 }));
 
 test("concurrent streams are separate", withClient(async (c) => {
     const s1 = c.openStream();
-    await s1.execute("DROP TABLE IF EXISTS t");
-    await s1.execute("CREATE TABLE t (number)");
-    await s1.execute("INSERT INTO t VALUES (1)");
+    await s1.run("DROP TABLE IF EXISTS t");
+    await s1.run("CREATE TABLE t (number)");
+    await s1.run("INSERT INTO t VALUES (1)");
 
     const s2 = c.openStream();
 
-    await s1.execute("BEGIN");
+    await s1.run("BEGIN");
 
-    await s2.execute("BEGIN");
-    await s2.execute("INSERT INTO t VALUES (10)");
+    await s2.run("BEGIN");
+    await s2.run("INSERT INTO t VALUES (10)");
 
     expect((await s1.queryValue("SELECT SUM(number) FROM t")).value).toStrictEqual(1);
     expect((await s2.queryValue("SELECT SUM(number) FROM t")).value).toStrictEqual(11);
@@ -292,14 +292,14 @@ test("concurrent streams are separate", withClient(async (c) => {
 
 test("concurrent operations are correctly ordered", withClient(async (c) => {
     const s = c.openStream();
-    await s.execute("DROP TABLE IF EXISTS t");
-    await s.execute("CREATE TABLE t (stream, value)");
+    await s.run("DROP TABLE IF EXISTS t");
+    await s.run("CREATE TABLE t (stream, value)");
 
     async function stream(streamId: number): Promise<void> {
         const s = c.openStream();
 
         let value = "s" + streamId;
-        await s.execute(["INSERT INTO t VALUES (?, ?)", [streamId, value]]);
+        await s.run(["INSERT INTO t VALUES (?, ?)", [streamId, value]]);
 
         const promises: Array<Promise<hrana.ValueResult>> = [];
         const expectedValues = [];
@@ -325,4 +325,105 @@ test("concurrent operations are correctly ordered", withClient(async (c) => {
         promises.push(stream(i));
     }
     await Promise.all(promises);
+}));
+
+test("compute a sequence of ops", withClient(async (c) => {
+    const x = c.allocVar();
+
+    const compute = c.compute();
+    const p1 = compute.enqueue(hrana.Op.set(x, hrana.Expr.value(42)));
+    const p2 = compute.enqueue(hrana.Op.eval(hrana.Expr.var_(x)));
+    const p3 = compute.enqueue(hrana.Op.unset(x));
+    await compute.send();
+
+    expect(await p1).toStrictEqual(null);
+    expect(await p2).toStrictEqual(42);
+    expect(await p3).toStrictEqual(null);
+
+    c.freeVar(x);
+}));
+
+test("execute statement with true condition", withClient(async (c) => {
+    const s = c.openStream();
+
+    const res = await s.execute()
+        .condition(hrana.Expr.value(1))
+        .queryValue("SELECT 42");
+    expect(res).toBeDefined();
+    expect(res!.value).toStrictEqual(42);
+}));
+
+test("execute statement with false condition", withClient(async (c) => {
+    const s = c.openStream();
+    await s.run("DROP TABLE IF EXISTS t");
+    await s.run("CREATE TABLE t (value)");
+
+    const res = await s.execute()
+        .condition(hrana.Expr.value(0))
+        .run("INSERT INTO t VALUES (1)");
+    expect(res).toBeUndefined();
+
+    expect((await s.queryValue("SELECT COUNT(*) FROM t")).value).toStrictEqual(0);
+}));
+
+test("evaluate ops on success", withClient(async (c) => {
+    const s = c.openStream();
+    const x = c.allocVar();
+
+    let compute = c.compute();
+    compute.enqueue(hrana.Op.set(x, hrana.Expr.value("not-set")));
+    await compute.send();
+
+    await s.execute()
+        .onOk(hrana.Op.set(x, hrana.Expr.value("ok")))
+        .onError(hrana.Op.set(x, hrana.Expr.value("error")))
+        .run("SELECT 1");
+
+    compute = c.compute();
+    const p = compute.enqueue(hrana.Op.eval(hrana.Expr.var_(x)));
+    await compute.send();
+
+    expect(await p).toStrictEqual("ok");
+}));
+
+test("evaluate ops on failure", withClient(async (c) => {
+    const s = c.openStream();
+    const x = c.allocVar();
+
+    let compute = c.compute();
+    compute.enqueue(hrana.Op.set(x, hrana.Expr.value("not-set")));
+    await compute.send();
+
+    await expect(s.execute()
+        .onOk(hrana.Op.set(x, hrana.Expr.value("ok")))
+        .onError(hrana.Op.set(x, hrana.Expr.value("error")))
+        .run("SELECT foobar")
+    ).rejects.toBeInstanceOf(hrana.ResponseError);
+
+    compute = c.compute();
+    const p = compute.enqueue(hrana.Op.eval(hrana.Expr.var_(x)));
+    await compute.send();
+
+    expect(await p).toStrictEqual("error");
+}));
+
+test("don't evaluate ops when condition is false", withClient(async (c) => {
+    const s = c.openStream();
+    const x = c.allocVar();
+
+    let compute = c.compute();
+    compute.enqueue(hrana.Op.set(x, hrana.Expr.value("not-set")));
+    await compute.send();
+
+    await s.execute()
+        .onOk(hrana.Op.set(x, hrana.Expr.value("ok")))
+        .onError(hrana.Op.set(x, hrana.Expr.value("error")))
+        .condition(hrana.Expr.value(0))
+        .run("SELECT 1");
+
+    compute = c.compute();
+    const p = compute.enqueue(hrana.Op.eval(hrana.Expr.var_(x)));
+    await compute.send();
+
+    expect(await p).toStrictEqual("not-set");
 }));

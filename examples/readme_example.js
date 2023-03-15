@@ -10,13 +10,13 @@ const client = hrana.open(url, jwt);
 // to a "connection" from other SQL databases
 const stream = client.openStream();
 
-await stream.execute(`CREATE TABLE book (
+await stream.run(`CREATE TABLE book (
     id INTEGER PRIMARY KEY NOT NULL,
     author TEXT NOT NULL,
     title TEXT NOT NULL,
     year INTEGER NOT NULL
 )`);
-await stream.execute(`INSERT INTO book (author, title, year) VALUES
+await stream.run(`INSERT INTO book (author, title, year) VALUES
     ('Jane Austen', 'Sense and Sensibility', 1811),
     ('Jane Austen', 'Pride and Prejudice', 1813),
     ('Jane Austen', 'Mansfield Park', 1814),
@@ -51,7 +51,7 @@ if (year.value !== undefined) {
 }
 
 // Execute a statement that does not return any rows
-const res = await stream.execute(["DELETE FROM book WHERE author = ?", ["J. K. Rowling"]])
+const res = await stream.run(["DELETE FROM book WHERE author = ?", ["J. K. Rowling"]])
 console.log(`${res.rowsAffected} books have been cancelled`);
 
 // When you are done, remember to close the client

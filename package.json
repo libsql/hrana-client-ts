@@ -1,6 +1,6 @@
 {
   "name": "@libsql/hrana-client",
-  "version": "0.2.1-pre",
+  "version": "0.3.0-pre",
   "keywords": [
     "hrana",
     "libsql",
@@ -40,6 +40,7 @@
     "build:esm": "tsc -p tsconfig.build-esm.json",
     "postbuild": "cp package-cjs.json ./lib-cjs/package.json",
 
+    "typecheck": "tsc",
     "test": "jest"
   },
 

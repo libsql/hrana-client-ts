@@ -42,7 +42,7 @@ if (year.value !== undefined) {
 }
 
 // Execute a statement that does not return any rows
-const res = await stream.execute(["DELETE FROM book WHERE author = ?", ["J. K. Rowling"]])
+const res = await stream.run(["DELETE FROM book WHERE author = ?", ["J. K. Rowling"]])
 console.log(`${res.rowsAffected} books have been cancelled`);
 
 // When you are done, remember to close the client

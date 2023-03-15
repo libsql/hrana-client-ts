@@ -14,6 +14,7 @@ export type Value =
 export type InValue =
     | Value
     | bigint
+    | boolean
     | Uint8Array
     | Date
     | RegExp
@@ -28,6 +29,8 @@ export function valueToProto(value: InValue): proto.Value {
         return {"type": "float", "value": +value};
     } else if (typeof value === "bigint") {
         return {"type": "text", "value": ""+value};
+    } else if (typeof value === "boolean") {
+        return {"type": "integer", "value": value ? "1" : "0"};
     } else if (value instanceof ArrayBuffer) {
         return {"type": "blob", "base64": Base64.fromUint8Array(new Uint8Array(value))};
     } else if (value instanceof Uint8Array) {

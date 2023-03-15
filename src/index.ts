@@ -1,5 +1,6 @@
 import WebSocket from "isomorphic-ws";
 
+import { Op, Expr, Var } from "./compute.js";
 import { ClientError, ProtoError, ClosedError } from "./errors.js";
 import IdAlloc from "./id_alloc.js";
 import type * as proto from "./proto.js";
@@ -11,8 +12,10 @@ import {
 } from "./result.js";
 import type { InStmt } from "./stmt.js";
 import { stmtToProto } from "./stmt.js";
-import type { InValue } from "./value.js";
+import type { Value, InValue } from "./value.js";
+import { valueFromProto } from "./value.js";
 
+export { Op, Expr, Var } from "./compute.js";
 export * from "./errors.js";
 export type { StmtResult, RowsResult, RowResult, ValueResult, Row } from "./result.js";
 export type { InStmt, InStmtArgs } from "./stmt.js";
@@ -43,6 +46,8 @@ export class Client {
     #requestIdAlloc: IdAlloc;
     // An allocator of stream ids.
     #streamIdAlloc: IdAlloc;
+    // An allocator of vars.
+    #varAlloc: IdAlloc;
 
     /** @private */
     constructor(socket: WebSocket, jwt: string | null) {
@@ -55,6 +60,7 @@ export class Client {
         this.#responseMap = new Map();
         this.#requestIdAlloc = new IdAlloc();
         this.#streamIdAlloc = new IdAlloc();
+        this.#varAlloc = new IdAlloc();
 
         this.#socket.onopen = () => this.#onSocketOpen();
         this.#socket.onclose = (event) => this.#onSocketClose(event);
@@ -246,15 +252,45 @@ export class Client {
         if (streamState.closed !== undefined) {
             errorCallback(new ClosedError("Stream was closed", streamState.closed));
             return;
-        } else if (this.#closed !== undefined) {
-            errorCallback(new ClosedError("Client was closed", this.#closed));
-            return;
         }
 
         const request: proto.ExecuteReq = {
             "type": "execute",
             "stream_id": streamState.streamId,
             "stmt": stmtState.stmt,
+            "condition": stmtState.condition,
+            "on_ok": stmtState.onOk,
+            "on_error": stmtState.onError,
+        };
+        this.#sendRequest(request, {responseCallback, errorCallback});
+    }
+
+    /** Return a builder for creating and executing a sequence of compute operations. */
+    compute(): Compute {
+        return new Compute(this);
+    }
+
+    // Execute a compute request and invoke callbacks in `computeState` when we get the results (or an error).
+    /** @private */
+    _compute(computeState: ComputeState): void {
+        const errorCallback = (error: Error) => {
+            computeState.errorCallbacks.forEach((callback) => callback(error));
+        };
+
+        const responseCallback = (response: proto.Response) => {
+            const results = (response as proto.ComputeResp)["results"];
+            if (results.length !== computeState.resultCallbacks.length) {
+                errorCallback(new ProtoError("Received wrong number of compute results"));
+                return;
+            }
+
+            computeState.doneCallback();
+            computeState.resultCallbacks.forEach((callback, i) => callback(results[i]));
+        };
+
+        const request: proto.ComputeReq = {
+            "type": "compute",
+            "ops": computeState.ops,
         };
         this.#sendRequest(request, {responseCallback, errorCallback});
     }
@@ -262,6 +298,16 @@ export class Client {
     /** Close the client and the WebSocket. */
     close() {
         this.#setClosed(new ClientError("Client was manually closed"));
+    }
+
+    /** Allocate a fresh var. */
+    allocVar(): Var {
+        return new Var(this.#varAlloc.alloc());
+    }
+
+    /** Free a var allocated with `this.allocVar()`. */
+    freeVar(var_: Var): void {
+        this.#varAlloc.free(var_._proto);
     }
 }
 
@@ -276,13 +322,23 @@ interface ResponseState extends ResponseCallbacks {
 
 interface StmtState {
     stmt: proto.Stmt;
-    resultCallback: (_: proto.StmtResult) => void;
+    condition: proto.ComputeExpr | null;
+    onOk: Array<proto.ComputeOp>;
+    onError: Array<proto.ComputeOp>;
+    resultCallback: (_: proto.StmtResult | null) => void;
     errorCallback: (_: Error) => void;
 }
 
 interface StreamState {
     streamId: number;
     closed: Error | undefined;
+}
+
+interface ComputeState {
+    ops: Array<proto.ComputeOp>;
+    doneCallback: () => void;
+    resultCallbacks: Array<(_: proto.Value) => void>;
+    errorCallbacks: Array<(_: Error) => void>;
 }
 
 /** A stream for executing SQL statements (a "database connection"). */
@@ -296,55 +352,34 @@ export class Stream {
         this.#state = state;
     }
 
-    /** Execute a raw Hrana statement. */
-    executeRaw(stmt: proto.Stmt): Promise<proto.StmtResult> {
-        return new Promise((resultCallback, errorCallback) => {
-            this.#client._execute(this.#state, {stmt, resultCallback, errorCallback});
-        });
-    }
-
     /** Execute a statement and return rows. */
     query(stmt: InStmt): Promise<RowsResult> {
-        return new Promise((rowsCallback, errorCallback) => {
-            this.#client._execute(this.#state, {
-                stmt: stmtToProto(stmt, true),
-                resultCallback(result) { rowsCallback(rowsResultFromProto(result)); },
-                errorCallback,
-            });
-        });
+        return this.execute().query(stmt).then(assertResult);
     }
 
     /** Execute a statement and return at most a single row. */
     queryRow(stmt: InStmt): Promise<RowResult> {
-        return new Promise((rowCallback, errorCallback) => {
-            this.#client._execute(this.#state, {
-                stmt: stmtToProto(stmt, true),
-                resultCallback(result) { rowCallback(rowResultFromProto(result)); },
-                errorCallback,
-            });
-        });
+        return this.execute().queryRow(stmt).then(assertResult);
     }
 
     /** Execute a statement and return at most a single value. */
     queryValue(stmt: InStmt): Promise<ValueResult> {
-        return new Promise((valueCallback, errorCallback) => {
-            this.#client._execute(this.#state, {
-                stmt: stmtToProto(stmt, true),
-                resultCallback(result) { valueCallback(valueResultFromProto(result)); },
-                errorCallback,
-            });
-        });
+        return this.execute().queryValue(stmt).then(assertResult);
     }
 
     /** Execute a statement without returning rows. */
-    execute(stmt: InStmt): Promise<StmtResult> {
-        return new Promise((doneCallback, errorCallback) => {
-            this.#client._execute(this.#state, {
-                stmt: stmtToProto(stmt, false),
-                resultCallback(result) { doneCallback(stmtResultFromProto(result)); },
-                errorCallback,
-            });
-        });
+    run(stmt: InStmt): Promise<StmtResult> {
+        return this.execute().run(stmt).then(assertResult);
+    }
+
+    /** Execute a raw Hrana statement. */
+    executeRaw(stmt: proto.Stmt): Promise<proto.StmtResult> {
+        return this.execute().executeRaw(stmt).then(assertResult);
+    }
+
+    /** Return a builder that you can use to execute a statement conditionally. */
+    execute(): Execute {
+        return new Execute(this.#client, this.#state);
     }
 
     /** Close the stream. */
@@ -353,3 +388,136 @@ export class Stream {
     }
 }
 
+function assertResult<T>(x: T | undefined): T {
+    if (x === undefined) {
+        throw new ProtoError("Server did not return a result");
+    }
+    return x;
+}
+
+/** A builder for executing a statement with a condition and optional compute operations on success or
+* failure. */
+export class Execute {
+    #client: Client;
+    #state: StreamState;
+
+    #condition: proto.ComputeExpr | null;
+    #onOk: Array<proto.ComputeOp>;
+    #onError: Array<proto.ComputeOp>;
+
+    /** @private */
+    constructor(client: Client, state: StreamState) {
+        this.#client = client;
+        this.#state = state;
+
+        this.#condition = null;
+        this.#onOk = [];
+        this.#onError = [];
+    }
+
+    /** Set the condition that needs to be satisfied to execute the statement. */
+    condition(expr: Expr): this {
+        this.#condition = expr._proto;
+        return this;
+    }
+
+    /** Add an operation to evaluate when the statement executed successfully. */
+    onOk(op: Op): this {
+        this.#onOk.push(op._proto);
+        return this;
+    }
+
+    /** Add an operation to evaluate when the statement failed to execute. */
+    onError(op: Op): this {
+        this.#onError.push(op._proto);
+        return this;
+    }
+
+
+    /** Execute a statement and return rows. */
+    query(stmt: InStmt): Promise<RowsResult | undefined> {
+        return this.#execute(stmtToProto(stmt, true), rowsResultFromProto);
+    }
+
+    /** Execute a statement and return at most a single row. */
+    queryRow(stmt: InStmt): Promise<RowResult | undefined> {
+        return this.#execute(stmtToProto(stmt, true), rowResultFromProto);
+    }
+
+    /** Execute a statement and return at most a single value. */
+    queryValue(stmt: InStmt): Promise<ValueResult | undefined> {
+        return this.#execute(stmtToProto(stmt, true), valueResultFromProto);
+    }
+
+    /** Execute a statement without returning rows. */
+    run(stmt: InStmt): Promise<StmtResult | undefined> {
+        return this.#execute(stmtToProto(stmt, false), stmtResultFromProto);
+    }
+
+    /** Execute a raw Hrana statement. */
+    executeRaw(stmt: proto.Stmt): Promise<proto.StmtResult | undefined> {
+        return this.#execute(stmt, (result) => result);
+    }
+
+    #execute<T>(stmt: proto.Stmt, fromProto: (result: proto.StmtResult) => T): Promise<T | undefined> {
+        return new Promise((doneCallback, errorCallback) => {
+            this.#client._execute(this.#state, {
+                stmt,
+                condition: this.#condition,
+                onOk: this.#onOk,
+                onError: this.#onError,
+                resultCallback(result) {
+                    doneCallback(result !== null ? fromProto(result) : undefined);
+                },
+                errorCallback,
+            });
+        });
+    }
+}
+
+/** A builder for executing a sequence of compute operations. */
+export class Compute {
+    #client: Client;
+    #ops: Array<proto.ComputeOp>;
+    #resultCallbacks: Array<(_: proto.Value) => void>;
+    #errorCallbacks: Array<(_: Error) => void>;
+
+    /** @private */
+    constructor(client: Client) {
+        this.#client = client;
+        this.#ops = [];
+        this.#resultCallbacks = [];
+        this.#errorCallbacks = [];
+    }
+
+    /** Enqueues a compute operation. The returned promise will resolve only after you call `send()`. */
+    enqueue(op: Op): Promise<Value> {
+        return new Promise((valueCallback, errorCallback) => {
+            this.#ops.push(op._proto);
+            this.#resultCallbacks.push((value) => valueCallback(valueFromProto(value)));
+            this.#errorCallbacks.push(errorCallback);
+        });
+    }
+
+    /** Enqueues a raw compute operation and returns the raw protocol value. */
+    enqueueRaw(op: proto.ComputeOp): Promise<proto.Value> {
+        return new Promise((valueCallback, errorCallback) => {
+            this.#ops.push(op);
+            this.#resultCallbacks.push(valueCallback);
+            this.#errorCallbacks.push(errorCallback);
+        });
+    }
+
+    /** Sends the compute operations to the server. */
+    send(): Promise<void> {
+        return new Promise((doneCallback, errorCallback) => {
+            this.#errorCallbacks.push(errorCallback);
+            this.#client._compute({
+                ops: this.#ops,
+                doneCallback,
+                resultCallbacks: this.#resultCallbacks,
+                errorCallbacks: this.#errorCallbacks,
+            });
+        });
+    }
+}
