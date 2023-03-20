@@ -120,29 +120,6 @@ test("Stream.run()", withClient(async (c) => {
     await s.run("COMMIT");
 }));
 
-test("Stream.executeRaw()", withClient(async (c) => {
-    const s = c.openStream();
-
-    let res = await s.executeRaw({
-        "sql": "SELECT 1 as one, ? as two, NULL as three",
-        "args": [{"type": "text", "value": "1+1"}],
-        "want_rows": true,
-    });
-
-    expect(res.cols).toStrictEqual([
-        {"name": "one"},
-        {"name": "two"},
-        {"name": "three"},
-    ]);
-    expect(res.rows).toStrictEqual([
-        [
-            {"type": "integer", "value": "1"},
-            {"type": "text", "value": "1+1"},
-            {"type": "null"},
-        ],
-    ]);
-}));
-
 test("positional args", withClient(async (c) => {
     const s = c.openStream();
     const res = await s.queryRow(["SELECT ?, ?3, ?2", ['one', null, 3]]);
@@ -327,105 +304,96 @@ test("concurrent operations are correctly ordered", withClient(async (c) => {
     await Promise.all(promises);
 }));
 
-test("compute a sequence of ops", withClient(async (c) => {
-    const x = c.allocVar();
-
-    const compute = c.compute();
-    const p1 = compute.enqueue(hrana.Op.set(x, hrana.Expr.value(42)));
-    const p2 = compute.enqueue(hrana.Op.eval(hrana.Expr.var_(x)));
-    const p3 = compute.enqueue(hrana.Op.eval(hrana.Expr.not(hrana.Expr.value(""))));
-    const p4 = compute.enqueue(hrana.Op.unset(x));
-    await compute.send();
-
-    expect(await p1).toStrictEqual(null);
-    expect(await p2).toStrictEqual(42);
-    expect(await p3).toStrictEqual(1);
-    expect(await p4).toStrictEqual(null);
-
-    c.freeVar(x);
-}));
-
-test("execute statement with true condition", withClient(async (c) => {
+test("program with sequence of ops", withClient(async (c) => {
     const s = c.openStream();
 
-    const res = await s.execute()
-        .condition(hrana.Expr.value(1))
-        .queryValue("SELECT 42");
-    expect(res).toBeDefined();
-    expect(res!.value).toStrictEqual(42);
+    const prog = s.prog();
+    const x = prog.allocVar();
+    const y = prog.allocVar();
+    prog.ops([
+        hrana.ProgOp.set(x, hrana.ProgExpr.value(10)),
+        hrana.ProgOp.set(y, hrana.ProgExpr.value("20")),
+    ]);
+    const promX = prog.output(hrana.ProgExpr.var_(x));
+    const promY = prog.output(hrana.ProgExpr.var_(y));
+    await prog.run();
+
+    expect(await promX).toStrictEqual(10);
+    expect(await promY).toStrictEqual("20");
 }));
 
-test("execute statement with false condition", withClient(async (c) => {
+test("program statement", withClient(async (c) => {
     const s = c.openStream();
-    await s.run("DROP TABLE IF EXISTS t");
-    await s.run("CREATE TABLE t (value)");
 
-    const res = await s.execute()
-        .condition(hrana.Expr.value(0))
-        .run("INSERT INTO t VALUES (1)");
-    expect(res).toBeUndefined();
+    const prog = s.prog();
+    const prom = prog.execute().queryValue("SELECT 10");
+    await prog.run();
 
-    expect((await s.queryValue("SELECT COUNT(*) FROM t")).value).toStrictEqual(0);
+    const res = await prom;
+    expect(res!.value).toStrictEqual(10);
 }));
 
-test("evaluate ops on success", withClient(async (c) => {
+test("program statement with error", withClient(async (c) => {
     const s = c.openStream();
-    const x = c.allocVar();
 
-    let compute = c.compute();
-    compute.enqueue(hrana.Op.set(x, hrana.Expr.value("not-set")));
-    await compute.send();
+    const prog = s.prog();
+    const prom = prog.execute().queryValue("SELECT foobar");
+    await prog.run();
 
-    await s.execute()
-        .onOk(hrana.Op.set(x, hrana.Expr.value("ok")))
-        .onError(hrana.Op.set(x, hrana.Expr.value("error")))
-        .run("SELECT 1");
-
-    compute = c.compute();
-    const p = compute.enqueue(hrana.Op.eval(hrana.Expr.var_(x)));
-    await compute.send();
-
-    expect(await p).toStrictEqual("ok");
+    await expect(prom).rejects.toBeInstanceOf(hrana.ResponseError);
 }));
 
-test("evaluate ops on failure", withClient(async (c) => {
+test("program statement with true condition", withClient(async (c) => {
     const s = c.openStream();
-    const x = c.allocVar();
+    const trueValues = [1, -1, 0.5, "this is true", new ArrayBuffer(1)];
+    for (const trueValue of trueValues) {
+        const prog = s.prog();
+        const prom = prog.execute()
+            .condition(hrana.ProgExpr.value(trueValue))
+            .queryValue("SELECT 10");
+        await prog.run();
 
-    let compute = c.compute();
-    compute.enqueue(hrana.Op.set(x, hrana.Expr.value("not-set")));
-    await compute.send();
-
-    await expect(s.execute()
-        .onOk(hrana.Op.set(x, hrana.Expr.value("ok")))
-        .onError(hrana.Op.set(x, hrana.Expr.value("error")))
-        .run("SELECT foobar")
-    ).rejects.toBeInstanceOf(hrana.ResponseError);
-
-    compute = c.compute();
-    const p = compute.enqueue(hrana.Op.eval(hrana.Expr.var_(x)));
-    await compute.send();
-
-    expect(await p).toStrictEqual("error");
+        const res = await prom;
+        expect(res!.value).toStrictEqual(10);
+    }
 }));
 
-test("don't evaluate ops when condition is false", withClient(async (c) => {
+test("program statement with false condition", withClient(async (c) => {
     const s = c.openStream();
-    const x = c.allocVar();
+    const falseValues = [0, "", new ArrayBuffer(0)];
+    for (const falseValue of falseValues) {
+        const prog = s.prog();
+        const prom = prog.execute()
+            .condition(hrana.ProgExpr.value(falseValue))
+            .queryValue("SELECT 10");
+        await prog.run();
 
-    let compute = c.compute();
-    compute.enqueue(hrana.Op.set(x, hrana.Expr.value("not-set")));
-    await compute.send();
+        const res = await prom;
+        expect(res).toBeUndefined();
+    }
+}));
 
-    await s.execute()
-        .onOk(hrana.Op.set(x, hrana.Expr.value("ok")))
-        .onError(hrana.Op.set(x, hrana.Expr.value("error")))
-        .condition(hrana.Expr.value(0))
-        .run("SELECT 1");
+test("program statement with ops", withClient(async (c) => {
+    const s = c.openStream();
 
-    compute = c.compute();
-    const p = compute.enqueue(hrana.Op.eval(hrana.Expr.var_(x)));
-    await compute.send();
+    const variants = [
+        {sql: "SELECT 1", condition: hrana.ProgExpr.value(1), expected: "ok"},
+        {sql: "SELECT foobar", condition: hrana.ProgExpr.value(1), expected: "error"},
+        {sql: "SELECT 1", condition: hrana.ProgExpr.value(0), expected: "skipped"},
+    ];
+    for (const {sql, condition, expected} of variants) {
+        const prog = s.prog();
+        const x = prog.allocVar();
+        prog.op(hrana.ProgOp.set(x, hrana.ProgExpr.value("skipped")));
+        prog.execute()
+            .condition(condition)
+            .onOk(hrana.ProgOp.set(x, hrana.ProgExpr.value("ok")))
+            .onError(hrana.ProgOp.set(x, hrana.ProgExpr.value("error")))
+            .queryValue(sql)
+            .catch(_ => undefined);
+        const promX = prog.output(hrana.ProgExpr.var_(x));
+        await prog.run();
 
-    expect(await p).toStrictEqual("not-set");
+        expect(await promX).toStrictEqual(expected);
+    }
 }));

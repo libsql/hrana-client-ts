@@ -63,14 +63,14 @@ export type Error = {
 export type Request =
     | OpenStreamReq
     | CloseStreamReq
-    | ComputeReq
     | ExecuteReq
+    | ProgReq
 
 export type Response =
     | OpenStreamResp
     | CloseStreamResp
-    | ComputeResp
     | ExecuteResp
+    | ProgResp
 
 // ### Open stream
 
@@ -94,32 +94,17 @@ export type CloseStreamResp = {
     "type": "close_stream",
 }
 
-// ### Evaluate compute operations
-
-export type ComputeReq = {
-    "type": "compute",
-    "ops": Array<ComputeOp>,
-}
-
-export type ComputeResp = {
-    "type": "compute",
-    "results": Array<Value>,
-}
-
 // ### Execute a statement
 
 export type ExecuteReq = {
     "type": "execute",
     "stream_id": int32,
     "stmt": Stmt,
-    "condition"?: ComputeExpr | null,
-    "on_ok"?: Array<ComputeOp>,
-    "on_error"?: Array<ComputeOp>,
 }
 
 export type ExecuteResp = {
     "type": "execute",
-    "result": StmtResult | null,
+    "result": StmtResult,
 }
 
 export type Stmt = {
@@ -145,6 +130,56 @@ export type Col = {
     "name": string | null,
 }
 
+// ### Execute a program
+
+export type ProgReq = {
+    "type": "prog",
+    "stream_id": int32,
+    "prog": Prog,
+}
+
+export type ProgResp = {
+    "type": "prog",
+    "result": ProgResult,
+}
+
+// ### Programs
+
+export type Prog = {
+    "steps": Array<ProgStep>,
+}
+
+export type ProgStep =
+    | ExecuteStep
+    | OutputStep
+    | OpStep
+
+export type ExecuteStep = {
+    "type": "execute",
+    "stmt": Stmt,
+    "condition"?: ProgExpr | null,
+    "on_ok"?: Array<ProgOp>,
+    "on_error"?: Array<ProgOp>,
+}
+
+export type OutputStep = {
+    "type": "output",
+    "expr": ProgExpr,
+}
+
+export type OpStep = {
+    "type": "op",
+    "ops": Array<ProgOp>,
+}
+
+export type ProgResult = {
+    "execute_results": Array<StmtResult | null>,
+    "execute_errors": Array<Error | null>,
+    "outputs": Array<Value>,
+}
+
+// ### Values
+
 export type Value =
     | { "type": "null" }
     | { "type": "integer", "value": string }
@@ -152,12 +187,12 @@ export type Value =
     | { "type": "text", "value": string }
     | { "type": "blob", "base64": string }
 
-export type ComputeOp =
-    | { "type": "set", "var": int32, "expr": ComputeExpr }
-    | { "type": "unset", "var": int32 }
-    | { "type": "eval", "expr": ComputeExpr }
+// ### Program operations and expressions
 
-export type ComputeExpr =
+export type ProgOp =
+    | { "type": "set", "var": int32, "expr": ProgExpr }
+
+export type ProgExpr =
     | Value
     | { "type": "var", "var": int32 }
-    | { "type": "not", "expr": ComputeExpr }
+    | { "type": "not", "expr": ProgExpr }
