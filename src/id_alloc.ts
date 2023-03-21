@@ -5,7 +5,7 @@
 // - All operations are O(1) time.
 // - The allocated ids are small (with a slight modification, we could always provide the smallest possible
 // id).
-export default class IdAlloc {
+export class IdAlloc {
     // Set of all allocated ids
     #usedIds: Set<number>;
     // Set of all free ids lower than `#usedIds.size`
