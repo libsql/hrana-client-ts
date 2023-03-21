@@ -173,11 +173,12 @@ export class Client {
 
             if (responseState === undefined) {
                 throw new ProtoError("Received unexpected OK response");
-            } else if (responseState.type !== msg["response"]["type"]) {
-                throw new ProtoError("Received unexpected type of response");
             }
 
             try {
+                if (responseState.type !== msg["response"]["type"]) {
+                    throw new ProtoError("Received unexpected type of response");
+                }
                 responseState.responseCallback(msg["response"]);
             } catch (e) {
                 responseState.errorCallback(e as Error);

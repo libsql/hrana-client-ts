@@ -50,31 +50,14 @@ async def handle_socket(websocket):
             if stream is not None:
                 await asyncio.to_thread(lambda: stream.conn.close())
             return {"type": "close_stream"}
-        elif req["type"] == "compute":
-            results = eval_ops(req["ops"])
-            return {"type": "compute", "results": results}
         elif req["type"] == "execute":
             stream = streams[int(req["stream_id"])]
-
-            condition = req.get("condition")
-            if condition is not None:
-                condition_passed = is_truthy(eval_expr(condition))
-            else:
-                condition_passed = True
-
-            if condition_passed:
-                ops = None
-                try:
-                    result = await asyncio.to_thread(lambda: execute_stmt(stream.conn, req["stmt"]))
-                    ops = req.get("on_ok")
-                except ResponseError:
-                    ops = req.get("on_error")
-                    raise
-                finally:
-                    eval_ops(ops or [])
-            else:
-                result = None
+            result = await asyncio.to_thread(lambda: execute_stmt(stream.conn, req["stmt"]))
             return {"type": "execute", "result": result}
+        elif req["type"] == "prog":
+            stream = streams[int(req["stream_id"])]
+            result = await execute_prog(stream.conn, req["prog"])
+            return {"type": "prog", "result": result}
         else:
             raise RuntimeError(f"Unknown req: {req!r}")
 
@@ -123,6 +106,65 @@ async def handle_socket(websocket):
             "last_insert_rowid": last_insert_rowid,
         }
 
+    async def execute_prog(conn, prog):
+        vars = {}
+        outputs = []
+        execute_results = []
+        execute_errors = []
+        for step in prog["steps"]:
+            if step["type"] == "execute":
+                condition = step.get("condition")
+                if condition is not None:
+                    enabled = is_truthy(eval_expr(vars, condition))
+                else:
+                    enabled = True
+
+                execute_result = None
+                execute_error = None
+                if enabled:
+                    ops = None
+                    try:
+                        execute_result = await asyncio.to_thread(lambda: execute_stmt(conn, step["stmt"]))
+                        ops = step.get("on_ok")
+                    except ResponseError as e:
+                        execute_error = {"message": str(e)}
+                        ops = step.get("on_error")
+                    finally:
+                        eval_ops(vars, ops or [])
+
+                execute_results.append(execute_result)
+                execute_errors.append(execute_error)
+            elif step["type"] == "output":
+                output = eval_expr(vars, step["expr"])
+                outputs.append(value_from_sqlite(output))
+            elif step["type"] == "op":
+                eval_ops(vars, step["ops"])
+            else:
+                raise RuntimeError(f"Unknown step: {step!r}")
+
+        return {
+            "execute_results": execute_results,
+            "execute_errors": execute_errors,
+            "outputs": outputs,
+        }
+
+    def eval_ops(vars, ops):
+        for op in ops:
+            if op["type"] == "set":
+                vars[op["var"]] = eval_expr(vars, op["expr"])
+            else:
+                raise RuntimeError(f"Unknown op: {op!r}")
+
+    def eval_expr(vars, expr):
+        if expr["type"] in ("null", "integer", "float", "text", "blob"):
+            return value_to_sqlite(expr)
+        elif expr["type"] == "var":
+            return vars[expr["var"]]
+        elif expr["type"] == "not":
+            return int(not is_truthy(eval_expr(vars, expr["expr"])))
+        else:
+            raise RuntimeError(f"Unknown expr: {expr!r}")
+
     def value_to_sqlite(value):
         if value["type"] == "null":
             return None
@@ -150,33 +192,6 @@ async def handle_socket(websocket):
             return {"type": "blob", "base64": base64.b64encode(value).decode()}
         else:
             raise RuntimeError(f"Unknown SQLite value: {value!r}")
-
-    compute_vars = {}
-
-    def eval_ops(ops):
-        return [value_from_sqlite(eval_op(op)) for op in ops]
-
-    def eval_op(op):
-        if op["type"] == "set":
-            compute_vars[op["var"]] = eval_expr(op["expr"])
-            return None
-        elif op["type"] == "unset":
-            compute_vars.pop(op["var"], None)
-            return None
-        elif op["type"] == "eval":
-            return eval_expr(op["expr"])
-        else:
-            raise RuntimeError(f"Unknown op: {op!r}")
-
-    def eval_expr(expr):
-        if expr["type"] in ("null", "integer", "float", "text", "blob"):
-            return value_to_sqlite(expr)
-        elif expr["type"] == "var":
-            return compute_vars[expr["var"]]
-        elif expr["type"] == "not":
-            return int(not is_truthy(eval_expr(expr["expr"])))
-        else:
-            raise RuntimeError(f"Unknown expr: {expr!r}")
 
     def is_truthy(value):
         return not not value
