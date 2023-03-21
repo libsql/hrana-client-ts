@@ -226,6 +226,14 @@ export class ProgExpr {
     static not(expr: ProgExpr): ProgExpr {
         return new ProgExpr({"type": "not", "expr": expr._proto});
     }
+
+    static and(exprs: Array<ProgExpr>): ProgExpr {
+        return new ProgExpr({"type": "and", "exprs": exprs.map(e => e._proto)});
+    }
+
+    static or(exprs: Array<ProgExpr>): ProgExpr {
+        return new ProgExpr({"type": "or", "exprs": exprs.map(e => e._proto)});
+    }
 }
 
 export class ProgVar {

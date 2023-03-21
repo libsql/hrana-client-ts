@@ -196,3 +196,5 @@ export type ProgExpr =
     | Value
     | { "type": "var", "var": int32 }
     | { "type": "not", "expr": ProgExpr }
+    | { "type": "and", "exprs": Array<ProgExpr> }
+    | { "type": "or", "exprs": Array<ProgExpr> }

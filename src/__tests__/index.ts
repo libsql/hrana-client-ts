@@ -397,3 +397,71 @@ test("program statement with ops", withClient(async (c) => {
         expect(await promX).toStrictEqual(expected);
     }
 }));
+
+describe("expressions", () => {
+    async function testExpr(c: hrana.Client, f: (prog: hrana.Prog) => hrana.ProgExpr, expected: hrana.Value) {
+        const s = c.openStream();
+        const prog = s.prog();
+        const expr = f(prog);
+        const prom = prog.output(expr);
+        await prog.run();
+        expect(await prom).toStrictEqual(expected);
+        s.close();
+    }
+
+    test("variable", withClient(async (c) => {
+        await testExpr(c, (prog) => {
+            const x = prog.allocVar();
+            prog.op(hrana.ProgOp.set(x, hrana.ProgExpr.value(42)));
+            return hrana.ProgExpr.var_(x);
+        }, 42);
+    }));
+
+    test("not", withClient(async (c) => {
+        const variants = [
+            {name: "0", value: 0, truthy: false},
+            {name: "1", value: 1, truthy: true},
+            {name: "empty string", value: "", truthy: false},
+            {name: "nonempty string", value: "x", truthy: true},
+            {name: "NULL", value: null, truthy: false},
+            {name: "0.5", value: 0.5, truthy: true},
+        ];
+        for (const {name, value, truthy} of variants) {
+            await testExpr(c,
+                (prog) => hrana.ProgExpr.not(hrana.ProgExpr.value(value)),
+                truthy ? 0 : 1,
+            );
+        }
+    }));
+
+    (() => {
+        const variants = [
+            {values: [], and: 1, or: 0},
+            {values: ["a"], and: "a", or: "a"},
+            {values: [""], and: "", or: ""},
+            {values: ["", "a"], and: "", or: "a"},
+            {values: ["a", ""], and: "", or: "a"},
+            {values: ["", 0, "a"], and: "", or: "a"},
+            {values: ["", "a", 0], and: "", or: "a"},
+            {values: ["a", "", 0], and: "", or: "a"},
+        ];
+
+        test("and", withClient(async (c) => {
+            for (const {values, and, or: _} of variants) {
+                await testExpr(c,
+                    (prog) => hrana.ProgExpr.and(values.map(hrana.ProgExpr.value)),
+                    and,
+                );
+            }
+        }));
+
+        test("or", withClient(async (c) => {
+            for (const {values, and: _, or} of variants) {
+                await testExpr(c,
+                    (prog) => hrana.ProgExpr.or(values.map(hrana.ProgExpr.value)),
+                    or,
+                );
+            }
+        }));
+    })();
+});
