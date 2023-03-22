@@ -237,16 +237,20 @@ export class Client {
         this.#sendRequest(request, {responseCallback, errorCallback});
     }
 
-    // Execute a program on a stream and invoke callbacks in `progCallbacks` when we get the results (or an
+    // Execute a batch on a stream and invoke callbacks in `batchCallbacks` when we get the results (or an
     // error).
     /** @private */
-    _prog(streamState: StreamState, progCallbacks: ProgCallbacks): void {
+    _batch(streamState: StreamState, batchCallbacks: BatchCallbacks): void {
         const responseCallback = (response: proto.Response) => {
-            const result = (response as proto.ProgResp)["result"];
-            progCallbacks.resultCallbacks.forEach(callback => callback(result));
+            const result = (response as proto.BatchResp)["result"];
+            for (const callback of batchCallbacks.resultCallbacks) {
+                callback(result);
+            }
         };
         const errorCallback = (error: Error) => {
-            progCallbacks.errorCallbacks.forEach(callback => callback(error));
+            for (const callback of batchCallbacks.errorCallbacks) {
+                callback(error);
+            }
         };
 
         if (streamState.closed !== undefined) {
@@ -254,10 +258,10 @@ export class Client {
             return;
         }
 
-        const request: proto.ProgReq = {
-            "type": "prog",
+        const request: proto.BatchReq = {
+            "type": "batch",
             "stream_id": streamState.streamId,
-            "prog": progCallbacks.prog,
+            "batch": batchCallbacks.batch,
         };
         this.#sendRequest(request, {responseCallback, errorCallback});
     }
@@ -288,8 +292,8 @@ export interface StreamState {
     closed: Error | undefined;
 }
 
-export interface ProgCallbacks {
-    prog: proto.Prog;
-    resultCallbacks: Array<(_: proto.ProgResult) => void>;
+export interface BatchCallbacks {
+    batch: proto.Batch;
+    resultCallbacks: Array<(_: proto.BatchResult) => void>;
     errorCallbacks: Array<(_: Error) => void>;
 }

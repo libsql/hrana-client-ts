@@ -64,13 +64,13 @@ export type Request =
     | OpenStreamReq
     | CloseStreamReq
     | ExecuteReq
-    | ProgReq
+    | BatchReq
 
 export type Response =
     | OpenStreamResp
     | CloseStreamResp
     | ExecuteResp
-    | ProgResp
+    | BatchResp
 
 // ### Open stream
 
@@ -130,53 +130,39 @@ export type Col = {
     "name": string | null,
 }
 
-// ### Execute a program
+// ### Execute a batch
 
-export type ProgReq = {
-    "type": "prog",
+export type BatchReq = {
+    "type": "batch",
     "stream_id": int32,
-    "prog": Prog,
+    "batch": Batch,
 }
 
-export type ProgResp = {
-    "type": "prog",
-    "result": ProgResult,
+export type BatchResp = {
+    "type": "batch",
+    "result": BatchResult,
 }
 
-// ### Programs
-
-export type Prog = {
-    "steps": Array<ProgStep>,
+export type Batch = {
+    "steps": Array<BatchStep>,
 }
 
-export type ProgStep =
-    | ExecuteStep
-    | OutputStep
-    | OpStep
-
-export type ExecuteStep = {
-    "type": "execute",
+export type BatchStep = {
+    "condition"?: BatchCond | null,
     "stmt": Stmt,
-    "condition"?: ProgExpr | null,
-    "on_ok"?: Array<ProgOp>,
-    "on_error"?: Array<ProgOp>,
 }
 
-export type OutputStep = {
-    "type": "output",
-    "expr": ProgExpr,
+export type BatchResult = {
+    "step_results": Array<StmtResult | null>,
+    "step_errors": Array<Error | null>,
 }
 
-export type OpStep = {
-    "type": "op",
-    "ops": Array<ProgOp>,
-}
-
-export type ProgResult = {
-    "execute_results": Array<StmtResult | null>,
-    "execute_errors": Array<Error | null>,
-    "outputs": Array<Value>,
-}
+export type BatchCond =
+    | { "type": "ok", "step": int32 }
+    | { "type": "error", "step": int32 }
+    | { "type": "not", "cond": BatchCond }
+    | { "type": "and", "conds": Array<BatchCond> }
+    | { "type": "or", "conds": Array<BatchCond> }
 
 // ### Values
 
@@ -186,15 +172,3 @@ export type Value =
     | { "type": "float", "value": number }
     | { "type": "text", "value": string }
     | { "type": "blob", "base64": string }
-
-// ### Program operations and expressions
-
-export type ProgOp =
-    | { "type": "set", "var": int32, "expr": ProgExpr }
-
-export type ProgExpr =
-    | Value
-    | { "type": "var", "var": int32 }
-    | { "type": "not", "expr": ProgExpr }
-    | { "type": "and", "exprs": Array<ProgExpr> }
-    | { "type": "or", "exprs": Array<ProgExpr> }

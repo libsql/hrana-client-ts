@@ -1,6 +1,6 @@
 import type { Client, StreamState } from "./client.js";
 import { ClientError } from "./errors.js";
-import { Prog } from "./prog.js";
+import { Batch } from "./batch.js";
 import type * as proto from "./proto.js";
 import type { RowsResult, RowResult, ValueResult, StmtResult } from "./result.js";
 import {
@@ -53,9 +53,9 @@ export class Stream {
         });
     }
 
-    /** Return a builder for creating and executing a program. */
-    prog(): Prog {
-        return new Prog(this.#client, this.#state);
+    /** Return a builder for creating and executing a batch. */
+    batch(): Batch {
+        return new Batch(this.#client, this.#state);
     }
 
     /** Close the stream. */
