@@ -14,7 +14,7 @@ export type { Value, InValue } from "./value.js";
 export type { proto };
 
 /** Open a Hrana client connected to the given `url`. */
-export function open(url: string, jwt?: string): Client {
+export function open(url: string | URL, jwt?: string): Client {
     const socket = new WebSocket(url, ["hrana1"]);
     return new Client(socket, jwt ?? null);
 }

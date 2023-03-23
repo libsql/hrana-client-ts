@@ -270,6 +270,11 @@ export class Client {
     close() {
         this.#setClosed(new ClientError("Client was manually closed"));
     }
+
+    /** True if the client is closed. */
+    get closed() {
+        return this.#closed !== undefined;
+    }
 }
 
 interface ResponseCallbacks {

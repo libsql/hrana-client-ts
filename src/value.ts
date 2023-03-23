@@ -1,6 +1,6 @@
 import { Base64 } from "js-base64";
 
-import { ProtoError } from "./errors.js";
+import { ClientError, ProtoError } from "./errors.js";
 import type * as proto from "./proto.js";
 
 /** JavaScript values that you can receive from the database in statement result. */
@@ -26,6 +26,9 @@ export function valueToProto(value: InValue): proto.Value {
     } else if (typeof value === "string") {
         return {"type": "text", "value": value};
     } else if (typeof value === "number") {
+        if (!Number.isFinite(value)) {
+            throw new ClientError("Only finite numbers (not Infinity or NaN) can be passed as arguments");
+        }
         return {"type": "float", "value": +value};
     } else if (typeof value === "bigint") {
         return {"type": "text", "value": ""+value};

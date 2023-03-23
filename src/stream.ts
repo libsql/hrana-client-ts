@@ -62,4 +62,9 @@ export class Stream {
     close(): void {
         this.#client._closeStream(this.#state, new ClientError("Stream was manually closed"));
     }
+
+    /** True if the stream is closed. */
+    get closed() {
+        return this.#state.closed !== undefined;
+    }
 }
