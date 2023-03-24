@@ -6,6 +6,7 @@ import type * as proto from "./proto.js";
 export { Client } from "./client.js";
 export * from "./errors.js";
 export { Batch, BatchStep, BatchCond } from "./batch.js";
+export * as raw from "./raw.js";
 export type { StmtResult, RowsResult, RowResult, ValueResult, Row } from "./result.js";
 export type { InStmt, InStmtArgs } from "./stmt.js";
 export { Stmt } from "./stmt.js";
