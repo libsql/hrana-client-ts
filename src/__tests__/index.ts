@@ -203,8 +203,8 @@ test("bigint as argument", withClient(async (c) => {
 
 test("Date as argument", withClient(async (c) => {
     const s = c.openStream();
-    const res = await s.queryValue(["SELECT ?", [new Date(2023, 0)]]);
-    expect(res.value).toStrictEqual(1672527600000);
+    const res = await s.queryValue(["SELECT ?", [new Date("2023-01-01Z")]]);
+    expect(res.value).toStrictEqual(1672531200000);
 }));
 
 test("RegExp as argument", withClient(async (c) => {
