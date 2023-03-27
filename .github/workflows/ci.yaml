@@ -34,5 +34,7 @@ jobs:
 
     - name: "Build"
       run: "npm run build"
-    - name: "Test using hrana-test-server"
+    - name: "Test"
       run: "python hrana-test-server/test_server.py npm test"
+    - name: "Example"
+      run: "python hrana-test-server/test_server.py node examples/readme_example.js"

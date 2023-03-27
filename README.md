@@ -13,7 +13,7 @@ import * as hrana from "@libsql/hrana-client";
 
 // Open a `hrana.Client`, which works like a connection pool in standard SQL
 // databases, but it uses just a single network connection internally
-const url = process.env.URL ?? "ws://localhost:2023"; // Address of the sqld server
+const url = process.env.URL ?? "ws://localhost:8080"; // Address of the sqld server
 const jwt = process.env.JWT; // JWT token for authentication
 const client = hrana.open(url, jwt);
 
@@ -43,7 +43,7 @@ if (year.value !== undefined) {
 
 // Execute a statement that does not return any rows
 const res = await stream.run(["DELETE FROM book WHERE author = ?", ["J. K. Rowling"]])
-console.log(`${res.rowsAffected} books have been cancelled`);
+console.log(`${res.affectedRowCount} books have been cancelled`);
 
 // When you are done, remember to close the client
 client.close();
