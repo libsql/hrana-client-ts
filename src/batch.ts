@@ -64,6 +64,7 @@ export class Batch {
 export class BatchStep {
     #batch: Batch;
     #conditions: Array<proto.BatchCond>;
+    /** @private */
     _index: number | undefined;
 
     /** @private */

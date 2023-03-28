@@ -4,7 +4,7 @@ on: [push, pull_request]
 jobs:
   "node-test":
     name: "Build and test on Node.js"
-    runs-on: "ubuntu-latest"
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         "node-version": ["14.x", "18.x"]

@@ -6,12 +6,14 @@ import type * as proto from "./proto.js";
 export { Client } from "./client.js";
 export * from "./errors.js";
 export { Batch, BatchStep, BatchCond } from "./batch.js";
+/** @internal */
 export * as raw from "./raw.js";
 export type { StmtResult, RowsResult, RowResult, ValueResult, Row } from "./result.js";
 export type { InStmt, InStmtArgs } from "./stmt.js";
 export { Stmt } from "./stmt.js";
 export { Stream } from "./stream.js";
 export type { Value, InValue } from "./value.js";
+/** @internal */
 export type { proto };
 
 /** Open a Hrana client connected to the given `url`. */
