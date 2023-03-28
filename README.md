@@ -1,5 +1,11 @@
 # Hrana client for TypeScript
 
+**[API docs][docs] | [Github][github] | [npm][npm]**
+
+[docs]: https://libsql.org/hrana-client-ts/
+[github]: https://github.com/libsql/hrana-client-ts/
+[npm]: https://www.npmjs.com/package/@libsql/hrana-client
+
 This package implements a Hrana client for TypeScript. Hrana is a protocol based on WebSockets that can be used to connect to sqld. It is more efficient than the postgres wire protocol (especially for edge deployments) and it supports interactive stateful SQL connections (called "streams") which are not supported by the HTTP API.
 
 > This package is intended mostly for internal use. Consider using the [`@libsql/client`][libsql-client] package, which will automatically use Hrana if you connect to a `ws://` or `wss://` URL.
