@@ -56,6 +56,7 @@ export type ResponseErrorMsg = {
 
 export type Error = {
     "message": string,
+    "code"?: string | null,
 }
 
 // ## Requests

@@ -20,13 +20,15 @@ export class ProtoError extends ClientError {
 
 /** Error thrown when the server returns an error response. */
 export class ResponseError extends ClientError {
+    code: string | undefined;
     /** @internal */
-    proto: proto.Error
+    proto: proto.Error;
 
     /** @private */
     constructor(message: string, protoError: proto.Error) {
         super(message);
         this.name = "ResponseError";
+        this.code = protoError["code"] ?? undefined;
         this.proto = protoError;
         this.stack = undefined;
     }
