@@ -1,4 +1,4 @@
-import WebSocket from "isomorphic-ws";
+import { WebSocket } from "@libsql/isomorphic-ws";
 
 import { IdAlloc } from "./id_alloc.js";
 import { ClientError, ProtoError, ClosedError } from "./errors.js";

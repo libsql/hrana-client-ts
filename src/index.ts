@@ -1,4 +1,4 @@
-import WebSocket from "isomorphic-ws";
+import { WebSocket } from "@libsql/isomorphic-ws";
 
 import { Client } from "./client.js";
 import type * as proto from "./proto.js";

@@ -49,9 +49,8 @@
   },
 
   "dependencies": {
-    "isomorphic-ws": "^5.0.0",
-    "js-base64": "^3.7.5",
-    "@types/ws": "^8.5.4"
+    "@libsql/isomorphic-ws": "^0.1.0",
+    "js-base64": "^3.7.5"
   },
   "devDependencies": {
     "@types/jest": "^29.4.0",
