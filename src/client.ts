@@ -151,6 +151,7 @@ export class Client {
             if (responseState === undefined) {
                 throw new ProtoError("Received unexpected OK response");
             }
+            this.#requestIdAlloc.free(requestId);
 
             try {
                 if (responseState.type !== msg["response"]["type"]) {
@@ -169,6 +170,8 @@ export class Client {
             if (responseState === undefined) {
                 throw new ProtoError("Received unexpected error response");
             }
+            this.#requestIdAlloc.free(requestId);
+
             responseState.errorCallback(errorFromProto(msg["error"]));
         } else {
             throw new ProtoError("Received unexpected message type");
