@@ -38,7 +38,7 @@ export class ResponseError extends ClientError {
 export class ClosedError extends ClientError {
     /** @private */
     constructor(message: string, cause: Error) {
-        super(message);
+        super(`${message}: ${cause}`);
         this.cause = cause;
     }
 }
