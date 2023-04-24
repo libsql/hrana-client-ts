@@ -49,7 +49,7 @@
   },
 
   "dependencies": {
-    "@libsql/isomorphic-ws": "^0.1.0",
+    "@libsql/isomorphic-ws": "^0.1.2",
     "js-base64": "^3.7.5"
   },
   "devDependencies": {

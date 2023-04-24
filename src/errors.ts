@@ -42,3 +42,12 @@ export class ClosedError extends ClientError {
         this.cause = cause;
     }
 }
+
+/** Error thrown when the environment does not seem to support WebSockets. */
+export class WebSocketUnsupportedError extends ClientError {
+    /** @private */
+    constructor(message: string) {
+        super(message);
+        this.name = "WebSocketUnsupportedError";
+    }
+}
