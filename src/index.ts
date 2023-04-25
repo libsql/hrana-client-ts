@@ -7,6 +7,8 @@ import type * as proto from "./proto.js";
 export { Client } from "./client.js";
 export * from "./errors.js";
 export { Batch, BatchStep, BatchCond } from "./batch.js";
+export type { ParsedLibsqlUrl } from "./libsql_url.js";
+export { parseLibsqlUrl } from "./libsql_url.js";
 /** @internal */
 export * as raw from "./raw.js";
 export type { StmtResult, RowsResult, RowResult, ValueResult, Row } from "./result.js";
