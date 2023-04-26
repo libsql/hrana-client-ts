@@ -36,10 +36,10 @@ export class Client {
         this.#requestIdAlloc = new IdAlloc();
         this.#streamIdAlloc = new IdAlloc();
 
-        this.#socket.onopen = () => this.#onSocketOpen();
-        this.#socket.onclose = (event) => this.#onSocketClose(event);
-        this.#socket.onerror = (event) => this.#onSocketError(event);
-        this.#socket.onmessage = (event) => this.#onSocketMessage(event);
+        this.#socket.addEventListener("open", () => this.#onSocketOpen());
+        this.#socket.addEventListener("close", (event) => this.#onSocketClose(event));
+        this.#socket.addEventListener("error", (event) => this.#onSocketError(event));
+        this.#socket.addEventListener("message", (event) => this.#onSocketMessage(event));
 
         this.#send({"type": "hello", "jwt": jwt});
     }
