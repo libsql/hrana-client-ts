@@ -415,3 +415,52 @@ describe("batches", () => {
         }));
     }
 });
+
+describe("describe", () => {
+    test("trivial statement", withClient(async (c) => {
+        const s = c.openStream();
+        const d = await s.describe("SELECT 1 AS one");
+        expect(d.paramNames).toStrictEqual([]);
+        expect(d.columns).toStrictEqual([
+            {name: "one", decltype: undefined},
+        ]);
+    }));
+
+    test("param names", withClient(async (c) => {
+        const s = c.openStream();
+        const d = await s.describe("SELECT ?, ?3, :one, $two, @three");
+        expect(d.paramNames).toStrictEqual([undefined, undefined, "?3", ":one", "$two", "@three"]);
+    }));
+
+    test("columns", withClient(async (c) => {
+        const s = c.openStream();
+        await s.run("BEGIN");
+        await s.run("DROP TABLE IF EXISTS t");
+        await s.run("CREATE TABLE t (a TEXT, b int NOT NULL, c FURRY BUNNY)");
+        const d = await s.describe("SELECT a, b, c, a + b AS sum FROM t");
+        expect(d.columns).toStrictEqual([
+            {name: "a", decltype: "TEXT"},
+            {name: "b", decltype: "INT"},
+            {name: "c", decltype: "FURRY BUNNY"},
+            {name: "sum", decltype: undefined},
+        ]);
+    }));
+
+    test("isExplain", withClient(async (c) => {
+        const s = c.openStream();
+        expect((await s.describe("SELECT 1")).isExplain).toStrictEqual(false);
+        expect((await s.describe("EXPLAIN SELECT 1")).isExplain).toStrictEqual(true);
+        expect((await s.describe("EXPLAIN QUERY PLAN SELECT 1")).isExplain).toStrictEqual(true);
+    }));
+
+    test("isReadonly", withClient(async (c) => {
+        const s = c.openStream();
+        await s.run("BEGIN");
+        await s.run("DROP TABLE IF EXISTS t");
+        await s.run("CREATE TABLE t (a TEXT)");
+        expect((await s.describe("SELECT 1")).isReadonly).toStrictEqual(true);
+        expect((await s.describe("UPDATE t SET a = 'foo'")).isReadonly).toStrictEqual(false);
+        expect((await s.describe("DROP TABLE t")).isReadonly).toStrictEqual(false);
+        expect((await s.describe("COMMIT")).isReadonly).toStrictEqual(true);
+    }));
+});

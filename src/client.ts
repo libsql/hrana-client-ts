@@ -6,11 +6,13 @@ import type * as proto from "./proto.js";
 import { errorFromProto } from "./result.js";
 import { Stream } from "./stream.js";
 
+export const webSocketProtocols = ["hrana2", "hrana1"];
+
 /** A client that talks to a SQL server using the Hrana protocol over a WebSocket. */
 export class Client {
     #socket: WebSocket;
-    // List of messages that we queue until the socket transitions from the CONNECTING to the OPEN state.
-    #msgsWaitingToOpen: proto.ClientMsg[];
+    // List of callbacks that we queue until the socket transitions from the CONNECTING to the OPEN state.
+    #callbacksWaitingToOpen: (() => void)[];
     // Stores the error that caused us to close the client (and the socket). If we are not closed, this is
     // `undefined`.
     #closed: Error | undefined;
@@ -28,7 +30,7 @@ export class Client {
     constructor(socket: WebSocket, jwt: string | null) {
         this.#socket = socket;
         this.#socket.binaryType = "arraybuffer";
-        this.#msgsWaitingToOpen = [];
+        this.#callbacksWaitingToOpen = [];
         this.#closed = undefined;
 
         this.#recvdHello = false;
@@ -53,16 +55,16 @@ export class Client {
         if (this.#socket.readyState >= WebSocket.OPEN) {
             this.#sendToSocket(msg);
         } else {
-            this.#msgsWaitingToOpen.push(msg);
+            this.#callbacksWaitingToOpen.push(() => this.#sendToSocket(msg));
         }
     }
 
     // The socket transitioned from CONNECTING to OPEN
     #onSocketOpen(): void {
-        for (const msg of this.#msgsWaitingToOpen) {
-            this.#sendToSocket(msg);
+        for (const callback of this.#callbacksWaitingToOpen) {
+            callback();
         }
-        this.#msgsWaitingToOpen.length = 0;
+        this.#callbacksWaitingToOpen.length = 0;
     }
 
     #sendToSocket(msg: proto.ClientMsg): void {
@@ -70,7 +72,8 @@ export class Client {
     }
 
     // Send a request to the server and invoke a callback when we get the response.
-    #sendRequest(request: proto.Request, callbacks: ResponseCallbacks) {
+    /** @private */
+    _sendRequest(request: proto.Request, callbacks: ResponseCallbacks) {
         if (this.#closed !== undefined) {
             callbacks.errorCallback(new ClosedError("Client is closed", this.#closed));
             return;
@@ -197,7 +200,7 @@ export class Client {
             "type": "open_stream",
             "stream_id": streamId,
         };
-        this.#sendRequest(request, {responseCallback, errorCallback});
+        this._sendRequest(request, {responseCallback, errorCallback});
 
         return new Stream(this, streamState);
     }
@@ -217,59 +220,17 @@ export class Client {
             "type": "close_stream",
             "stream_id": streamState.streamId,
         };
-        this.#sendRequest(request, {responseCallback: callback, errorCallback: callback});
+        this._sendRequest(request, {responseCallback: callback, errorCallback: callback});
     }
 
-    // Execute a statement on a stream and invoke callbacks in `stmtCallbacks` when we get the results (or an
-    // error).
+    // Send a stream-specific request to the server and invoke a callback when we get the response.
     /** @private */
-    _execute(streamState: StreamState, stmtCallbacks: StmtCallbacks): void {
-        const responseCallback = (response: proto.Response) => {
-            stmtCallbacks.resultCallback((response as proto.ExecuteResp)["result"]);
-        };
-        const errorCallback = (error: Error) => {
-            stmtCallbacks.errorCallback(error);
-        }
-
+    _sendStreamRequest(streamState: StreamState, request: proto.Request, callbacks: ResponseCallbacks): void {
         if (streamState.closed !== undefined) {
-            errorCallback(new ClosedError("Stream was closed", streamState.closed));
+            callbacks.errorCallback(new ClosedError("Stream is closed", streamState.closed));
             return;
         }
-
-        const request: proto.ExecuteReq = {
-            "type": "execute",
-            "stream_id": streamState.streamId,
-            "stmt": stmtCallbacks.stmt,
-        };
-        this.#sendRequest(request, {responseCallback, errorCallback});
-    }
-
-    // Execute a batch on a stream and invoke callbacks in `batchCallbacks` when we get the results (or an
-    // error).
-    /** @private */
-    _batch(streamState: StreamState, batchCallbacks: BatchCallbacks): void {
-        const responseCallback = (response: proto.Response) => {
-            const result = (response as proto.BatchResp)["result"];
-            for (const callback of batchCallbacks.resultCallbacks) {
-                callback(result);
-            }
-            batchCallbacks.doneCallback();
-        };
-        const errorCallback = (error: Error) => {
-            batchCallbacks.errorCallback(error);
-        };
-
-        if (streamState.closed !== undefined) {
-            errorCallback(new ClosedError("Stream was closed", streamState.closed));
-            return;
-        }
-
-        const request: proto.BatchReq = {
-            "type": "batch",
-            "stream_id": streamState.streamId,
-            "batch": batchCallbacks.batch,
-        };
-        this.#sendRequest(request, {responseCallback, errorCallback});
+        this._sendRequest(request, callbacks);
     }
 
     /** Close the client and the WebSocket. */
@@ -283,7 +244,7 @@ export class Client {
     }
 }
 
-interface ResponseCallbacks {
+export interface ResponseCallbacks {
     responseCallback: (_: proto.Response) => void;
     errorCallback: (_: Error) => void;
 }
@@ -292,20 +253,7 @@ interface ResponseState extends ResponseCallbacks {
     type: string;
 }
 
-export interface StmtCallbacks {
-    stmt: proto.Stmt;
-    resultCallback: (_: proto.StmtResult) => void;
-    errorCallback: (_: Error) => void;
-}
-
 export interface StreamState {
     streamId: number;
     closed: Error | undefined;
-}
-
-export interface BatchCallbacks {
-    batch: proto.Batch;
-    resultCallbacks: Array<(_: proto.BatchResult) => void>;
-    doneCallback: () => void;
-    errorCallback: (_: Error) => void;
 }

@@ -66,12 +66,14 @@ export type Request =
     | CloseStreamReq
     | ExecuteReq
     | BatchReq
+    | DescribeReq
 
 export type Response =
     | OpenStreamResp
     | CloseStreamResp
     | ExecuteResp
     | BatchResp
+    | DescribeResp
 
 // ### Open stream
 
@@ -164,6 +166,35 @@ export type BatchCond =
     | { "type": "not", "cond": BatchCond }
     | { "type": "and", "conds": Array<BatchCond> }
     | { "type": "or", "conds": Array<BatchCond> }
+
+// ### Describe a statement
+
+export type DescribeReq = {
+    "type": "describe",
+    "stream_id": int32,
+    "sql": string,
+}
+
+export type DescribeResp = {
+    "type": "describe",
+    "result": DescribeResult,
+}
+
+export type DescribeResult = {
+    "params": Array<DescribeParam>,
+    "cols": Array<DescribeCol>,
+    "is_explain": boolean,
+    "is_readonly": boolean,
+}
+
+export type DescribeParam = {
+    "name": string | null,
+}
+
+export type DescribeCol = {
+    "name": string,
+    "decltype": string | null,
+}
 
 // ### Values
 

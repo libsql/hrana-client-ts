@@ -18,6 +18,7 @@ export class Batch {
     #client: Client;
     #streamState: StreamState;
 
+    #executed: boolean;
     /** @private */
     _steps: Array<proto.BatchStep>;
     /** @private */
@@ -27,6 +28,7 @@ export class Batch {
     constructor(client: Client, streamState: StreamState) {
         this.#client = client;
         this.#streamState = streamState;
+        this.#executed = false;
 
         this._steps = [];
         this._resultCallbacks = [];
@@ -39,16 +41,27 @@ export class Batch {
 
     /** Execute the batch. */
     execute(): Promise<void> {
+        if (this.#executed) {
+            throw new Error("The Batch has already been executed");
+        }
+        this.#executed = true;
+
         return new Promise((doneCallback, errorCallback) => {
-            const batchState = {
-                batch: {
+            const request: proto.BatchReq = {
+                "type": "batch",
+                "stream_id": this.#streamState.streamId,
+                "batch": {
                     "steps": this._steps,
                 },
-                resultCallbacks: this._resultCallbacks,
-                doneCallback,
-                errorCallback,
             };
-            this.#client._batch(this.#streamState, batchState);
+            const responseCallback = (response: proto.Response): void => {
+                const result = (response as proto.BatchResp)["result"];
+                for (const callback of this._resultCallbacks) {
+                    callback(result);
+                }
+                doneCallback();
+            };
+            this.#client._sendStreamRequest(this.#streamState, request, {responseCallback, errorCallback});
         });
     }
 }

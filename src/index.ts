@@ -1,6 +1,6 @@
 import { WebSocket } from "@libsql/isomorphic-ws";
 
-import { Client } from "./client.js";
+import { Client, webSocketProtocols } from "./client.js";
 import { WebSocketUnsupportedError } from "./errors.js";
 import type * as proto from "./proto.js";
 
@@ -24,6 +24,6 @@ export function open(url: string | URL, jwt?: string): Client {
     if (typeof WebSocket === "undefined") {
         throw new WebSocketUnsupportedError("WebSockets are not supported in this environment");
     }
-    const socket = new WebSocket(url, ["hrana1"]);
+    const socket = new WebSocket(url, webSocketProtocols);
     return new Client(socket, jwt ?? null);
 }

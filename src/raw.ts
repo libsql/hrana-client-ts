@@ -1,3 +1,4 @@
+export { describeResultFromProto } from "./describe.js";
 export {
     stmtResultFromProto, rowsResultFromProto,
     rowResultFromProto, valueResultFromProto,
