@@ -22,8 +22,6 @@ export class Batch {
     _steps: Array<proto.BatchStep>;
     /** @private */
     _resultCallbacks: Array<(_: proto.BatchResult) => void>;
-    /** @private */
-    _errorCallbacks: Array<(_: Error) => void>;
 
     /** @private */
     constructor(client: Client, streamState: StreamState) {
@@ -32,7 +30,6 @@ export class Batch {
 
         this._steps = [];
         this._resultCallbacks = [];
-        this._errorCallbacks = [];
     }
 
     /** Return a builder for adding a step to the batch. */
@@ -42,21 +39,17 @@ export class Batch {
 
     /** Execute the batch. */
     execute(): Promise<void> {
-        const promise = new Promise<void>((doneCallback, errorCallback) => {
-            this._resultCallbacks.push((_result) => doneCallback(undefined));
-            this._errorCallbacks.push(errorCallback);
+        return new Promise((doneCallback, errorCallback) => {
+            const batchState = {
+                batch: {
+                    "steps": this._steps,
+                },
+                resultCallbacks: this._resultCallbacks,
+                doneCallback,
+                errorCallback,
+            };
+            this.#client._batch(this.#streamState, batchState);
         });
-
-        const batchState = {
-            batch: {
-                "steps": this._steps,
-            },
-            resultCallbacks: this._resultCallbacks,
-            errorCallbacks: this._errorCallbacks,
-        };
-        this.#client._batch(this.#streamState, batchState);
-
-        return promise;
     }
 }
 
@@ -138,7 +131,6 @@ export class BatchStep {
                     outputCallback(undefined);
                 }
             });
-            this.#batch._errorCallbacks.push(errorCallback);
         });
     }
 }

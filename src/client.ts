@@ -1,7 +1,7 @@
 import { WebSocket } from "@libsql/isomorphic-ws";
 
 import { IdAlloc } from "./id_alloc.js";
-import { ClientError, ProtoError, ClosedError } from "./errors.js";
+import { ClientError, ProtoError, ClosedError, WebSocketError } from "./errors.js";
 import type * as proto from "./proto.js";
 import { errorFromProto } from "./result.js";
 import { Stream } from "./stream.js";
@@ -85,12 +85,16 @@ export class Client {
     #onSocketError(event: Event | WebSocket.ErrorEvent): void {
         const eventMessage = (event as {message?: string}).message;
         const message = eventMessage ?? "Connection was closed due to an error";
-        this.#setClosed(new ClientError(message));
+        this.#setClosed(new WebSocketError(message));
     }
 
     // The socket was closed.
     #onSocketClose(event: WebSocket.CloseEvent): void {
-        this.#setClosed(new ClientError(`WebSocket was closed with code ${event.code}: ${event.reason}`));
+        let message = `WebSocket was closed with code ${event.code}`;
+        if (event.reason) {
+            message += `: ${event.reason}`;
+        }
+        this.#setClosed(new WebSocketError(message));
     }
 
     // Close the client with the given error.
@@ -249,11 +253,10 @@ export class Client {
             for (const callback of batchCallbacks.resultCallbacks) {
                 callback(result);
             }
+            batchCallbacks.doneCallback();
         };
         const errorCallback = (error: Error) => {
-            for (const callback of batchCallbacks.errorCallbacks) {
-                callback(error);
-            }
+            batchCallbacks.errorCallback(error);
         };
 
         if (streamState.closed !== undefined) {
@@ -303,5 +306,6 @@ export interface StreamState {
 export interface BatchCallbacks {
     batch: proto.Batch;
     resultCallbacks: Array<(_: proto.BatchResult) => void>;
-    errorCallbacks: Array<(_: Error) => void>;
+    doneCallback: () => void;
+    errorCallback: (_: Error) => void;
 }

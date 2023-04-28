@@ -52,6 +52,15 @@ export class WebSocketUnsupportedError extends ClientError {
     }
 }
 
+/** Error thrown when we encounter a WebSocket error. */
+export class WebSocketError extends ClientError {
+    /** @private */
+    constructor(message: string) {
+        super(message);
+        this.name = "WebSocketError";
+    }
+}
+
 /** Error thrown when a libsql URL is not valid. */
 export class LibsqlUrlParseError extends ClientError {
     /** @private */
