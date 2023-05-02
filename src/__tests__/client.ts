@@ -11,6 +11,11 @@ function withClient(f: (c: hrana.Client) => Promise<void>): () => Promise<void> 
     };
 }
 
+let version = 1;
+if (process.env.VERSION) {
+    version = parseInt(process.env.VERSION, 10);
+}
+
 test("Stream.queryValue() with value", withClient(async (c) => {
     const s = c.openStream();
     const res = await s.queryValue("SELECT 1 AS one");
@@ -416,7 +421,7 @@ describe("batches", () => {
     }
 });
 
-describe("describe", () => {
+(version >= 2 ? describe : describe.skip)("describe", () => {
     test("trivial statement", withClient(async (c) => {
         const s = c.openStream();
         const d = await s.describe("SELECT 1 AS one");
@@ -462,5 +467,12 @@ describe("describe", () => {
         expect((await s.describe("UPDATE t SET a = 'foo'")).isReadonly).toStrictEqual(false);
         expect((await s.describe("DROP TABLE t")).isReadonly).toStrictEqual(false);
         expect((await s.describe("COMMIT")).isReadonly).toStrictEqual(true);
+    }));
+});
+
+(version < 2 ? describe : describe.skip)("unsupported version 2 features", () => {
+    test("describe", withClient(async (c) => {
+        const s = c.openStream();
+        expect(s.describe("SELECT 1")).rejects.toBeInstanceOf(hrana.ProtocolVersionError);
     }));
 });

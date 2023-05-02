@@ -69,3 +69,12 @@ export class LibsqlUrlParseError extends ClientError {
         this.name = "LibsqlUrlParseError";
     }
 }
+
+/** Error thrown when the protocol version is too low to support a feature. */
+export class ProtocolVersionError extends ClientError {
+    /** @private */
+    constructor(message: string) {
+        super(message);
+        this.name = "ProtocolVersionError";
+    }
+}

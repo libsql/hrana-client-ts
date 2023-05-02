@@ -2,7 +2,7 @@ import type { Client, StreamState } from "./client.js";
 import type { DescribeResult } from "./describe.js";
 import { Batch } from "./batch.js";
 import { describeResultFromProto } from "./describe.js";
-import { ClientError } from "./errors.js";
+import { ClientError, ProtocolVersionError } from "./errors.js";
 import type * as proto from "./proto.js";
 import type { RowsResult, RowResult, ValueResult, StmtResult } from "./result.js";
 import {
@@ -64,7 +64,15 @@ export class Stream {
     }
 
     /** Parse and analyze a statement. */
-    describe(sql: string): Promise<DescribeResult> {
+    async describe(sql: string): Promise<DescribeResult> {
+        const version = await this.#client._getVersion();
+        if (version < 2) {
+            return Promise.reject(new ProtocolVersionError(
+                "describe() is supported on protocol version 2 and higher, " +
+                    `but the server only supports version ${version}`
+            ));
+        }
+
         return new Promise((doneCallback, errorCallback) => {
             const request: proto.DescribeReq = {
                 "type": "describe",

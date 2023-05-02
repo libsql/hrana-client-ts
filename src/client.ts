@@ -6,7 +6,11 @@ import type * as proto from "./proto.js";
 import { errorFromProto } from "./result.js";
 import { Stream } from "./stream.js";
 
-export const webSocketProtocols = ["hrana2", "hrana1"];
+export type ProtocolVersion = 1 | 2;
+export const protocolVersions: Map<string, ProtocolVersion> = new Map([
+    ["hrana2", 2],
+    ["hrana1", 1],
+]);
 
 /** A client that talks to a SQL server using the Hrana protocol over a WebSocket. */
 export class Client {
@@ -19,6 +23,9 @@ export class Client {
 
     // Have we received a response to our "hello" from the server?
     #recvdHello: boolean;
+    // Protocol version negotiated with the server. It is only available after the socket transitions to the
+    // OPEN state.
+    #version: ProtocolVersion | undefined;
     // A map from request id to the responses that we expect to receive from the server.
     #responseMap: Map<number, ResponseState>;
     // An allocator of request ids.
@@ -34,6 +41,7 @@ export class Client {
         this.#closed = undefined;
 
         this.#recvdHello = false;
+        this.#version = undefined;
         this.#responseMap = new Map();
         this.#requestIdAlloc = new IdAlloc();
         this.#streamIdAlloc = new IdAlloc();
@@ -61,6 +69,18 @@ export class Client {
 
     // The socket transitioned from CONNECTING to OPEN
     #onSocketOpen(): void {
+        const protocol = this.#socket.protocol;
+        if (protocol === "") {
+            this.#version = 1;
+        } else {
+            this.#version = protocolVersions.get(protocol);
+            if (this.#version === undefined) {
+                this.#setClosed(new ProtoError(
+                    `Unrecognized WebSocket subprotocol: ${JSON.stringify(protocol)}`,
+                ));
+            }
+        }
+
         for (const callback of this.#callbacksWaitingToOpen) {
             callback();
         }
@@ -69,6 +89,18 @@ export class Client {
 
     #sendToSocket(msg: proto.ClientMsg): void {
         this.#socket.send(JSON.stringify(msg));
+    }
+
+    // Get the protocol version negotiated with the server, possibly waiting until the socket is open.
+    /** @private */
+    _getVersion(): Promise<ProtocolVersion> {
+        return new Promise((versionCallback) => {
+            if (this.#version !== undefined) {
+                versionCallback(this.#version);
+            } else {
+                this.#callbacksWaitingToOpen.push(() => versionCallback(this.#version!));
+            }
+        });
     }
 
     // Send a request to the server and invoke a callback when we get the response.
