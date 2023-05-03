@@ -67,6 +67,8 @@ export type Request =
     | ExecuteReq
     | BatchReq
     | DescribeReq
+    | StoreSqlReq
+    | CloseSqlReq
 
 export type Response =
     | OpenStreamResp
@@ -74,6 +76,8 @@ export type Response =
     | ExecuteResp
     | BatchResp
     | DescribeResp
+    | StoreSqlResp
+    | CloseSqlResp
 
 // ### Open stream
 
@@ -111,7 +115,8 @@ export type ExecuteResp = {
 }
 
 export type Stmt = {
-    "sql": string,
+    "sql"?: string | undefined,
+    "sql_id"?: int32 | undefined,
     "args"?: Array<Value>,
     "named_args"?: Array<NamedArg>,
     "want_rows": boolean,
@@ -172,7 +177,8 @@ export type BatchCond =
 export type DescribeReq = {
     "type": "describe",
     "stream_id": int32,
-    "sql": string,
+    "sql"?: string | undefined,
+    "sql_id"?: int32 | undefined,
 }
 
 export type DescribeResp = {
@@ -194,6 +200,29 @@ export type DescribeParam = {
 export type DescribeCol = {
     "name": string,
     "decltype": string | null,
+}
+
+// ### Store an SQL text on the server
+
+export type StoreSqlReq = {
+    "type": "store_sql",
+    "sql_id": int32,
+    "sql": string,
+}
+
+export type StoreSqlResp = {
+    "type": "store_sql",
+}
+
+// ### Close a stored SQL text
+
+export type CloseSqlReq = {
+    "type": "close_sql",
+    "sql_id": int32,
+}
+
+export type CloseSqlResp = {
+    "type": "close_sql",
 }
 
 // ### Values

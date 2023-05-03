@@ -470,9 +470,54 @@ describe("batches", () => {
     }));
 });
 
+(version >= 2 ? describe : describe.skip)("stored sql", () => {
+    test("query", withClient(async (c) => {
+        const sql = await c.storeSql("SELECT 42");
+        const s = c.openStream();
+        expect((await s.queryValue(sql)).value).toStrictEqual(42);
+    }));
+
+    test("query with args", withClient(async (c) => {
+        const sql = await c.storeSql("SELECT ?");
+        const s = c.openStream();
+        expect((await s.queryValue([sql, [42]])).value).toStrictEqual(42);
+    }));
+
+    test("batch", withClient(async (c) => {
+        const s = c.openStream();
+        const sql1 = await c.storeSql("SELECT 11");
+        const sql2 = await c.storeSql("SELECT 'one', 'two'");
+        const batch = s.batch();
+        const prom1 = batch.step().queryValue(sql1);
+        const prom2 = batch.step().queryRow(sql2);
+        await batch.execute();
+
+        expect((await prom1)!.value).toStrictEqual(11);
+        expect(Array.from((await prom2)!.row!)).toStrictEqual(["one", "two"]);
+    }));
+
+    test("describe", withClient(async (c) => {
+        const sql = await c.storeSql("SELECT :a, $b");
+        const s = c.openStream();
+        const d = await s.describe(sql);
+        expect(d.paramNames).toStrictEqual([":a", "$b"]);
+    }));
+
+    test("close", withClient(async (c) => {
+        const sql = await c.storeSql("SELECT :a, $b");
+        expect(sql.closed).toBe(false);
+        sql.close();
+        expect(sql.closed).toBe(true);
+    }));
+});
+
 (version < 2 ? describe : describe.skip)("unsupported version 2 features", () => {
     test("describe", withClient(async (c) => {
         const s = c.openStream();
         expect(s.describe("SELECT 1")).rejects.toBeInstanceOf(hrana.ProtocolVersionError);
+    }));
+
+    test("storeSql", withClient(async (c) => {
+        expect(c.storeSql("SELECT 1")).rejects.toBeInstanceOf(hrana.ProtocolVersionError);
     }));
 });

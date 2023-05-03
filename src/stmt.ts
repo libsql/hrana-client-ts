@@ -1,15 +1,17 @@
 import type * as proto from "./proto.js";
+import type { InSql } from "./sql.js";
+import { sqlToProto } from "./sql.js";
 import type { InValue } from "./value.js";
 import { valueToProto, protoNull } from "./value.js";
 
 /** A statement that you can send to the database. Statements are represented by the {@link Stmt} class, but
- * as a shorthand, you can specify an SQL string without arguments, or a tuple with the SQL string and
- * positional or named arguments.
+ * as a shorthand, you can specify an SQL text without arguments, or a tuple with the SQL text and positional
+ * or named arguments.
  */
 export type InStmt =
     | Stmt
-    | string
-    | [string, InStmtArgs];
+    | InSql
+    | [InSql, InStmtArgs];
 
 /** Arguments for a statement. Either an array that is bound to parameters by position, or an object with
 * values that are bound to parameters by name. */
@@ -18,15 +20,15 @@ export type InStmtArgs = Array<InValue> | Record<string, InValue>;
 /** A statement that can be evaluated by the database. Besides the SQL text, it also contains the positional
  * and named arguments. */
 export class Stmt {
-    /** The SQL statement string. */
-    readonly sql: string;
+    /** The SQL statement text. */
+    readonly sql: InSql;
     /** @private */
     _args: Array<proto.Value>;
     /** @private */
     _namedArgs: Map<string, proto.Value>;
 
     /** Initialize the statement with given SQL text. */
-    constructor(sql: string) {
+    constructor(sql: InSql) {
         this.sql = sql;
         this._args = [];
         this._namedArgs = new Map();
@@ -70,17 +72,17 @@ export class Stmt {
 }
 
 export function stmtToProto(stmt: InStmt, wantRows: boolean): proto.Stmt {
-    let sql;
+    let inSql: InSql;
     let args: Array<proto.Value> = [];
     let namedArgs: Array<proto.NamedArg> = [];
     if (stmt instanceof Stmt) {
-        sql = stmt.sql;
+        inSql = stmt.sql;
         args = stmt._args;
         for (const [name, value] of stmt._namedArgs.entries()) {
             namedArgs.push({"name": name, "value": value});
         }
     } else if (Array.isArray(stmt)) {
-        sql = stmt[0];
+        inSql = stmt[0];
         if (Array.isArray(stmt[1])) {
             args = stmt[1].map(valueToProto);
         } else {
@@ -90,8 +92,16 @@ export function stmtToProto(stmt: InStmt, wantRows: boolean): proto.Stmt {
             });
         }
     } else {
-        sql = ""+stmt;
+        inSql = stmt;
     }
-    return {"sql": sql, "args": args, "named_args": namedArgs, "want_rows": wantRows};
+
+    const {sql, sqlId} = sqlToProto(inSql);
+    return {
+        "sql": sql,
+        "sql_id": sqlId,
+        "args": args,
+        "named_args": namedArgs,
+        "want_rows": wantRows,
+    };
 }
 

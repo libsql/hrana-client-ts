@@ -1,9 +1,10 @@
 import { WebSocket } from "@libsql/isomorphic-ws";
 
 import { IdAlloc } from "./id_alloc.js";
-import { ClientError, ProtoError, ClosedError, WebSocketError } from "./errors.js";
+import { ClientError, ProtoError, ClosedError, WebSocketError, ProtocolVersionError } from "./errors.js";
 import type * as proto from "./proto.js";
 import { errorFromProto } from "./result.js";
+import { Sql } from "./sql.js";
 import { Stream } from "./stream.js";
 
 export type ProtocolVersion = 1 | 2;
@@ -16,7 +17,7 @@ export const protocolVersions: Map<string, ProtocolVersion> = new Map([
 export class Client {
     #socket: WebSocket;
     // List of callbacks that we queue until the socket transitions from the CONNECTING to the OPEN state.
-    #callbacksWaitingToOpen: (() => void)[];
+    #openCallbacks: Array<OpenCallbacks>;
     // Stores the error that caused us to close the client (and the socket). If we are not closed, this is
     // `undefined`.
     #closed: Error | undefined;
@@ -32,12 +33,14 @@ export class Client {
     #requestIdAlloc: IdAlloc;
     // An allocator of stream ids.
     #streamIdAlloc: IdAlloc;
+    // An allocator of SQL text ids.
+    #sqlIdAlloc: IdAlloc;
 
     /** @private */
     constructor(socket: WebSocket, jwt: string | null) {
         this.#socket = socket;
         this.#socket.binaryType = "arraybuffer";
-        this.#callbacksWaitingToOpen = [];
+        this.#openCallbacks = [];
         this.#closed = undefined;
 
         this.#recvdHello = false;
@@ -45,6 +48,7 @@ export class Client {
         this.#responseMap = new Map();
         this.#requestIdAlloc = new IdAlloc();
         this.#streamIdAlloc = new IdAlloc();
+        this.#sqlIdAlloc = new IdAlloc();
 
         this.#socket.addEventListener("open", () => this.#onSocketOpen());
         this.#socket.addEventListener("close", (event) => this.#onSocketClose(event));
@@ -63,7 +67,9 @@ export class Client {
         if (this.#socket.readyState >= WebSocket.OPEN) {
             this.#sendToSocket(msg);
         } else {
-            this.#callbacksWaitingToOpen.push(() => this.#sendToSocket(msg));
+            const openCallback = () => this.#sendToSocket(msg);
+            const errorCallback = (_: Error) => undefined;
+            this.#openCallbacks.push({openCallback, errorCallback});
         }
     }
 
@@ -81,24 +87,26 @@ export class Client {
             }
         }
 
-        for (const callback of this.#callbacksWaitingToOpen) {
-            callback();
+        for (const callbacks of this.#openCallbacks) {
+            callbacks.openCallback();
         }
-        this.#callbacksWaitingToOpen.length = 0;
+        this.#openCallbacks.length = 0;
     }
 
     #sendToSocket(msg: proto.ClientMsg): void {
         this.#socket.send(JSON.stringify(msg));
     }
 
-    // Get the protocol version negotiated with the server, possibly waiting until the socket is open.
-    /** @private */
-    _getVersion(): Promise<ProtocolVersion> {
-        return new Promise((versionCallback) => {
-            if (this.#version !== undefined) {
+    /** Get the protocol version negotiated with the server, possibly waiting until the socket is open. */
+    getVersion(): Promise<ProtocolVersion> {
+        return new Promise((versionCallback, errorCallback) => {
+            if (this.#closed !== undefined) {
+                errorCallback(this.#closed);
+            } else if (this.#version !== undefined) {
                 versionCallback(this.#version);
             } else {
-                this.#callbacksWaitingToOpen.push(() => versionCallback(this.#version!));
+                const openCallback = () => versionCallback(this.#version!);
+                this.#openCallbacks.push({openCallback, errorCallback});
             }
         });
     }
@@ -138,6 +146,11 @@ export class Client {
             return;
         }
         this.#closed = error;
+
+        for (const callbacks of this.#openCallbacks) {
+            callbacks.errorCallback(error);
+        }
+        this.#openCallbacks.length = 0;
 
         for (const [requestId, responseState] of this.#responseMap.entries()) {
             responseState.errorCallback(error);
@@ -265,6 +278,53 @@ export class Client {
         this._sendRequest(request, callbacks);
     }
 
+    /** Cache a SQL text on the server. This requires protocol version 2 or higher. */
+    async storeSql(sql: string): Promise<Sql> {
+        const version = await this.getVersion();
+        if (version < 2) {
+            throw new ProtocolVersionError(
+                "describe() is supported on protocol version 2 and higher, " +
+                    `but the server only supports version ${version}`
+            );
+        }
+
+        const sqlId = this.#sqlIdAlloc.alloc();
+        const sqlState = {
+            sqlId,
+            closed: undefined,
+        };
+
+        const responseCallback = () => undefined;
+        const errorCallback = (e: Error) => this._closeSql(sqlState, e);
+
+        const request: proto.StoreSqlReq = {
+            "type": "store_sql",
+            "sql_id": sqlId,
+            "sql": sql,
+        };
+        this._sendRequest(request, {responseCallback, errorCallback});
+
+        return new Sql(this, sqlState);
+    }
+
+    // Make sure that the SQL text is closed.
+    /** @private */
+    _closeSql(sqlState: SqlState, error: Error): void {
+        if (sqlState.closed !== undefined || this.#closed !== undefined) {
+            return;
+        }
+        sqlState.closed = error;
+
+        const callback = () => {
+            this.#sqlIdAlloc.free(sqlState.sqlId);
+        };
+        const request: proto.CloseSqlReq = {
+            "type": "close_sql",
+            "sql_id": sqlState.sqlId,
+        };
+        this._sendRequest(request, {responseCallback: callback, errorCallback: callback});
+    }
+
     /** Close the client and the WebSocket. */
     close() {
         this.#setClosed(new ClientError("Client was manually closed"));
@@ -274,6 +334,11 @@ export class Client {
     get closed() {
         return this.#closed !== undefined;
     }
+}
+
+export interface OpenCallbacks {
+    openCallback: () => void;
+    errorCallback: (_: Error) => void;
 }
 
 export interface ResponseCallbacks {
@@ -287,5 +352,10 @@ interface ResponseState extends ResponseCallbacks {
 
 export interface StreamState {
     streamId: number;
+    closed: Error | undefined;
+}
+
+export interface SqlState {
+    sqlId: number;
     closed: Error | undefined;
 }
