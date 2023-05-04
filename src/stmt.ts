@@ -21,7 +21,7 @@ export type InStmtArgs = Array<InValue> | Record<string, InValue>;
  * and named arguments. */
 export class Stmt {
     /** The SQL statement text. */
-    readonly sql: InSql;
+    sql: InSql;
     /** @private */
     _args: Array<proto.Value>;
     /** @private */
