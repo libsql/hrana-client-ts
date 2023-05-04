@@ -27,6 +27,9 @@ export class Client {
     // Protocol version negotiated with the server. It is only available after the socket transitions to the
     // OPEN state.
     #version: ProtocolVersion | undefined;
+    // Has the `getVersion()` function been called? This is only used to validate that the API is used
+    // correctly.
+    #getVersionCalled: boolean;
     // A map from request id to the responses that we expect to receive from the server.
     #responseMap: Map<number, ResponseState>;
     // An allocator of request ids.
@@ -45,6 +48,7 @@ export class Client {
 
         this.#recvdHello = false;
         this.#version = undefined;
+        this.#getVersionCalled = false;
         this.#responseMap = new Map();
         this.#requestIdAlloc = new IdAlloc();
         this.#streamIdAlloc = new IdAlloc();
@@ -100,6 +104,7 @@ export class Client {
     /** Get the protocol version negotiated with the server, possibly waiting until the socket is open. */
     getVersion(): Promise<ProtocolVersion> {
         return new Promise((versionCallback, errorCallback) => {
+            this.#getVersionCalled = true;
             if (this.#closed !== undefined) {
                 errorCallback(this.#closed);
             } else if (this.#version !== undefined) {
@@ -109,6 +114,23 @@ export class Client {
                 this.#openCallbacks.push({openCallback, errorCallback});
             }
         });
+    }
+
+    // Make sure that the negotiated version is at least `minVersion`.
+    /** @private */
+    _ensureVersion(minVersion: ProtocolVersion, feature: string): void {
+        if (this.#version === undefined || !this.#getVersionCalled) {
+            throw new ProtocolVersionError(
+                `${feature} is supported only on protocol version ${minVersion} and higher, ` +
+                    "but the version supported by the server is not yet known. Use Client.getVersion() " +
+                    "to wait until the version is available.",
+            );
+        } else if (this.#version < minVersion) {
+            throw new ProtocolVersionError(
+                `${feature} is supported on protocol version ${minVersion} and higher, ` +
+                    `but the server only supports version ${this.#version}`
+            );
+        }
     }
 
     // Send a request to the server and invoke a callback when we get the response.
@@ -279,20 +301,15 @@ export class Client {
     }
 
     /** Cache a SQL text on the server. This requires protocol version 2 or higher. */
-    async storeSql(sql: string): Promise<Sql> {
-        const version = await this.getVersion();
-        if (version < 2) {
-            throw new ProtocolVersionError(
-                "describe() is supported on protocol version 2 and higher, " +
-                    `but the server only supports version ${version}`
-            );
-        }
+    storeSql(sql: string): Sql {
+        this._ensureVersion(2, "storeSql()");
 
         const sqlId = this.#sqlIdAlloc.alloc();
         const sqlState = {
             sqlId,
             closed: undefined,
         };
+
 
         const responseCallback = () => undefined;
         const errorCallback = (e: Error) => this._closeSql(sqlState, e);

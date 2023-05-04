@@ -421,8 +421,9 @@ describe("batches", () => {
     }
 });
 
-(version >= 2 ? describe : describe.skip)("describe", () => {
+(version >= 2 ? describe : describe.skip)("describe()", () => {
     test("trivial statement", withClient(async (c) => {
+        await c.getVersion();
         const s = c.openStream();
         const d = await s.describe("SELECT 1 AS one");
         expect(d.paramNames).toStrictEqual([]);
@@ -432,12 +433,14 @@ describe("batches", () => {
     }));
 
     test("param names", withClient(async (c) => {
+        await c.getVersion();
         const s = c.openStream();
         const d = await s.describe("SELECT ?, ?3, :one, $two, @three");
         expect(d.paramNames).toStrictEqual([undefined, undefined, "?3", ":one", "$two", "@three"]);
     }));
 
     test("columns", withClient(async (c) => {
+        await c.getVersion();
         const s = c.openStream();
         await s.run("BEGIN");
         await s.run("DROP TABLE IF EXISTS t");
@@ -452,6 +455,7 @@ describe("batches", () => {
     }));
 
     test("isExplain", withClient(async (c) => {
+        await c.getVersion();
         const s = c.openStream();
         expect((await s.describe("SELECT 1")).isExplain).toStrictEqual(false);
         expect((await s.describe("EXPLAIN SELECT 1")).isExplain).toStrictEqual(true);
@@ -459,6 +463,7 @@ describe("batches", () => {
     }));
 
     test("isReadonly", withClient(async (c) => {
+        await c.getVersion();
         const s = c.openStream();
         await s.run("BEGIN");
         await s.run("DROP TABLE IF EXISTS t");
@@ -468,25 +473,33 @@ describe("batches", () => {
         expect((await s.describe("DROP TABLE t")).isReadonly).toStrictEqual(false);
         expect((await s.describe("COMMIT")).isReadonly).toStrictEqual(true);
     }));
+
+    test("without calling getVersion() first", withClient(async (c) => {
+        const s = c.openStream();
+        expect(() => s.describe("SELECT 1")).toThrow(hrana.ProtocolVersionError);
+    }));
 });
 
-(version >= 2 ? describe : describe.skip)("stored sql", () => {
+(version >= 2 ? describe : describe.skip)("storeSql()", () => {
     test("query", withClient(async (c) => {
-        const sql = await c.storeSql("SELECT 42");
+        await c.getVersion();
+        const sql = c.storeSql("SELECT 42");
         const s = c.openStream();
         expect((await s.queryValue(sql)).value).toStrictEqual(42);
     }));
 
     test("query with args", withClient(async (c) => {
-        const sql = await c.storeSql("SELECT ?");
+        await c.getVersion();
+        const sql = c.storeSql("SELECT ?");
         const s = c.openStream();
         expect((await s.queryValue([sql, [42]])).value).toStrictEqual(42);
     }));
 
     test("batch", withClient(async (c) => {
+        await c.getVersion();
         const s = c.openStream();
-        const sql1 = await c.storeSql("SELECT 11");
-        const sql2 = await c.storeSql("SELECT 'one', 'two'");
+        const sql1 = c.storeSql("SELECT 11");
+        const sql2 = c.storeSql("SELECT 'one', 'two'");
         const batch = s.batch();
         const prom1 = batch.step().queryValue(sql1);
         const prom2 = batch.step().queryRow(sql2);
@@ -497,27 +510,26 @@ describe("batches", () => {
     }));
 
     test("describe", withClient(async (c) => {
-        const sql = await c.storeSql("SELECT :a, $b");
+        await c.getVersion();
+        const sql = c.storeSql("SELECT :a, $b");
         const s = c.openStream();
         const d = await s.describe(sql);
         expect(d.paramNames).toStrictEqual([":a", "$b"]);
     }));
 
     test("close", withClient(async (c) => {
-        const sql = await c.storeSql("SELECT :a, $b");
+        await c.getVersion();
+        const sql = c.storeSql("SELECT :a, $b");
         expect(sql.closed).toBe(false);
         sql.close();
         expect(sql.closed).toBe(true);
     }));
-});
 
-(version < 2 ? describe : describe.skip)("unsupported version 2 features", () => {
-    test("describe", withClient(async (c) => {
-        const s = c.openStream();
-        expect(s.describe("SELECT 1")).rejects.toBeInstanceOf(hrana.ProtocolVersionError);
-    }));
-
-    test("storeSql", withClient(async (c) => {
-        expect(c.storeSql("SELECT 1")).rejects.toBeInstanceOf(hrana.ProtocolVersionError);
+    test("without calling getVersion() first", withClient(async (c) => {
+        expect(() => c.storeSql("SELECT 1")).toThrow(hrana.ProtocolVersionError);
     }));
 });
+
+test("getVersion()", withClient(async (c) => {
+    expect(await c.getVersion()).toBeGreaterThanOrEqual(version);
+}));

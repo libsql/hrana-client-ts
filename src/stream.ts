@@ -66,14 +66,8 @@ export class Stream {
     }
 
     /** Parse and analyze a statement. This requires protocol version 2 or higher. */
-    async describe(inSql: InSql): Promise<DescribeResult> {
-        const version = await this.#client.getVersion();
-        if (version < 2) {
-            throw new ProtocolVersionError(
-                "describe() is supported on protocol version 2 and higher, " +
-                    `but the server only supports version ${version}`
-            );
-        }
+    describe(inSql: InSql): Promise<DescribeResult> {
+        this.#client._ensureVersion(2, "describe()");
 
         const {sql, sqlId} = sqlToProto(inSql);
         return new Promise((doneCallback, errorCallback) => {
