@@ -85,6 +85,26 @@ export class Stream {
         });
     }
 
+    /** Execute a sequence of statements separated by semicolons. This requires protocol version 2 or higher.
+     * */
+    sequence(inSql: InSql): Promise<void> {
+        this.#client._ensureVersion(2, "sequence()");
+
+        const {sql, sqlId} = sqlToProto(inSql);
+        return new Promise((doneCallback, errorCallback) => {
+            const request: proto.SequenceReq = {
+                "type": "sequence",
+                "stream_id": this.#state.streamId,
+                "sql": sql,
+                "sql_id": sqlId,
+            };
+            const responseCallback = (_response: proto.Response): void => {
+                doneCallback();
+            };
+            this.#client._sendStreamRequest(this.#state, request, {responseCallback, errorCallback});
+        });
+    }
+
     /** Close the stream. */
     close(): void {
         this.#client._closeStream(this.#state, new ClientError("Stream was manually closed"));

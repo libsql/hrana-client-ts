@@ -13,6 +13,8 @@ export interface StmtResult {
     lastInsertRowid: string | undefined;
     /** Names of columns in the result. */
     columnNames: Array<string | undefined>;
+    /** Declared types of columns in the result. */
+    columnDecltypes: Array<string | undefined>;
 }
 
 /** An array of rows returned by a database statement. */
@@ -45,7 +47,8 @@ export function stmtResultFromProto(result: proto.StmtResult): StmtResult {
     return {
         affectedRowCount: result["affected_row_count"],
         lastInsertRowid: result["last_insert_rowid"] ?? undefined,
-        columnNames: result["cols"].map(col => col.name ?? undefined),
+        columnNames: result["cols"].map(col => col["name"] ?? undefined),
+        columnDecltypes: result["cols"].map(col => col["decltype"] ?? undefined),
     };
 }
 

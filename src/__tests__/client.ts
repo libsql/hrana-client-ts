@@ -11,7 +11,7 @@ function withClient(f: (c: hrana.Client) => Promise<void>): () => Promise<void> 
     };
 }
 
-let version = 1;
+let version = 2;
 if (process.env.VERSION) {
     version = parseInt(process.env.VERSION, 10);
 }
@@ -255,6 +255,17 @@ test("column names", withClient(async (c) => {
     expect(res.columnNames).toStrictEqual(["one", "two"]);
 }));
 
+(version >= 2 ? test : test.skip)("column decltypes", withClient(async (c) => {
+    await c.getVersion();
+    const s = c.openStream();
+    await s.run("BEGIN");
+    await s.run("DROP TABLE IF EXISTS t");
+    await s.run("CREATE TABLE t (a TEXT, b int NOT NULL, c FURRY BUNNY)");
+
+    const res = await s.query("SELECT a, b, c, a + b AS sum FROM t");
+    expect(res.columnDecltypes).toStrictEqual(["TEXT", "INT", "FURRY BUNNY", undefined]);
+}));
+
 test("concurrent streams are separate", withClient(async (c) => {
     const s1 = c.openStream();
     await s1.run("DROP TABLE IF EXISTS t");
@@ -477,6 +488,35 @@ describe("batches", () => {
     test("without calling getVersion() first", withClient(async (c) => {
         const s = c.openStream();
         expect(() => s.describe("SELECT 1")).toThrow(hrana.ProtocolVersionError);
+    }));
+});
+
+(version >= 2 ? describe : describe.skip)("sequence()", () => {
+    test("no statements", withClient(async (c) => {
+        await c.getVersion();
+        const s = c.openStream();
+        await s.sequence("  \n-- this is a comment\n");
+    }));
+
+    test("a single statement", withClient(async (c) => {
+        await c.getVersion();
+        const s = c.openStream();
+        await s.run("BEGIN");
+        await s.run("DROP TABLE IF EXISTS t");
+        await s.sequence("CREATE TABLE t(a);");
+        expect((await s.queryValue("SELECT COUNT(*) FROM t")).value).toStrictEqual(0);
+    }));
+
+    test("multiple statements", withClient(async (c) => {
+        await c.getVersion();
+        const s = c.openStream();
+        await s.sequence(`
+            BEGIN;
+            DROP TABLE IF EXISTS t;
+            CREATE TABLE t(a);
+            INSERT INTO t VALUES (1), (2), (3);
+        `);
+        expect((await s.queryValue("SELECT COUNT(*) FROM t")).value).toStrictEqual(3);
     }));
 });
 

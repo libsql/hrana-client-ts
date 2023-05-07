@@ -67,6 +67,7 @@ export type Request =
     | ExecuteReq
     | BatchReq
     | DescribeReq
+    | SequenceReq
     | StoreSqlReq
     | CloseSqlReq
 
@@ -76,6 +77,7 @@ export type Response =
     | ExecuteResp
     | BatchResp
     | DescribeResp
+    | SequenceResp
     | StoreSqlResp
     | CloseSqlResp
 
@@ -136,6 +138,7 @@ export type StmtResult = {
 
 export type Col = {
     "name": string | null,
+    "decltype"?: string | null,
 }
 
 // ### Execute a batch
@@ -200,6 +203,19 @@ export type DescribeParam = {
 export type DescribeCol = {
     "name": string,
     "decltype": string | null,
+}
+
+// ### Execute a sequence of SQL statements
+
+export type SequenceReq = {
+    "type": "sequence",
+    "stream_id": int32,
+    "sql"?: string | null,
+    "sql_id"?: int32 | null,
+}
+
+export type SequenceResp = {
+    "type": "sequence",
 }
 
 // ### Store an SQL text on the server
