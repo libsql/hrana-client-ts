@@ -37,7 +37,11 @@ jobs:
 
     - name: "Build"
       run: "npm run build"
-    - name: "Test"
-      run: "python hrana-test-server/test_server.py npm test"
+    - name: "Test version 1"
+      run: "python hrana-test-server/server_v1.py npm test"
+      env: {"VERSION": "1"}
+    - name: "Test version 2"
+      run: "python hrana-test-server/server_v2.py npm test"
+      env: {"VERSION": "2"}
     - name: "Example"
-      run: "python hrana-test-server/test_server.py node examples/readme_example.js"
+      run: "python hrana-test-server/server_v2.py node examples/readme_example.js"
