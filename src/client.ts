@@ -18,6 +18,8 @@ export class Client {
     #socket: WebSocket;
     // List of callbacks that we queue until the socket transitions from the CONNECTING to the OPEN state.
     #openCallbacks: Array<OpenCallbacks>;
+    // Have we already transitioned from CONNECTING to OPEN and fired the callbacks in #openCallbacks?
+    #opened: boolean;
     // Stores the error that caused us to close the client (and the socket). If we are not closed, this is
     // `undefined`.
     #closed: Error | undefined;
@@ -44,6 +46,7 @@ export class Client {
         this.#socket = socket;
         this.#socket.binaryType = "arraybuffer";
         this.#openCallbacks = [];
+        this.#opened = false;
         this.#closed = undefined;
 
         this.#recvdHello = false;
@@ -68,7 +71,7 @@ export class Client {
             throw new ClientError("Internal error: trying to send a message on a closed client");
         }
 
-        if (this.#socket.readyState >= WebSocket.OPEN) {
+        if (this.#opened) {
             this.#sendToSocket(msg);
         } else {
             const openCallback = () => this.#sendToSocket(msg);
@@ -95,6 +98,7 @@ export class Client {
             callbacks.openCallback();
         }
         this.#openCallbacks.length = 0;
+        this.#opened = true;
     }
 
     #sendToSocket(msg: proto.ClientMsg): void {
@@ -107,11 +111,11 @@ export class Client {
             this.#getVersionCalled = true;
             if (this.#closed !== undefined) {
                 errorCallback(this.#closed);
-            } else if (this.#version !== undefined) {
-                versionCallback(this.#version);
-            } else {
+            } else if (!this.#opened) {
                 const openCallback = () => versionCallback(this.#version!);
                 this.#openCallbacks.push({openCallback, errorCallback});
+            } else {
+                versionCallback(this.#version!);
             }
         });
     }
