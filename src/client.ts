@@ -85,6 +85,10 @@ export class Client {
         const protocol = this.#socket.protocol;
         if (protocol === "") {
             this.#version = 1;
+        } else if (protocol === undefined) {
+            // TODO: This is a workaround for Miniflare, which does not support the `protocol` property on a
+            // WebSocket
+            this.#version = 1;
         } else {
             this.#version = protocolVersions.get(protocol);
             if (this.#version === undefined) {
