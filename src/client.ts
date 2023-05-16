@@ -193,6 +193,10 @@ export class Client {
 
     // We received a message from the socket.
     #onSocketMessage(event: WebSocket.MessageEvent): void {
+        if (this.#closed !== undefined) {
+            return;
+        }
+
         if (typeof event.data !== "string") {
             this.#socket.close(3003, "Only string messages are accepted");
             this.#setClosed(new ProtoError("Received non-string message from server"))
