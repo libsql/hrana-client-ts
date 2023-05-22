@@ -1,6 +1,6 @@
 import * as hrana from "..";
 
-function withClient(f: (c: hrana.Client) => Promise<void>): () => Promise<void> {
+function withClient(f: (c: hrana.WsClient) => Promise<void>): () => Promise<void> {
     return async () => {
         const c = hrana.open(process.env.URL ?? "ws://localhost:8080", process.env.JWT);
         try {
@@ -203,7 +203,7 @@ test("ArrayBuffer roundtrip", withClient(async (c) => {
 test("bigint as argument", withClient(async (c) => {
     const s = c.openStream();
     const res = await s.queryValue(["SELECT ?", [-123n]]);
-    expect(res.value).toStrictEqual("-123");
+    expect(res.value).toStrictEqual(-123);
 }));
 
 test("Date as argument", withClient(async (c) => {

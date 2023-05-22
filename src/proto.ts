@@ -1,120 +1,17 @@
-// TypeScript types for the messages in the Hrana protocol
+// Types for the JSON structures that are common for WebSockets and HTTP
 //
-// The structure of this file follows the specification in HRANA_SPEC.md
+// The structure of this file follows the Hrana specification.
 
 export type int32 = number
 
-// ## Messages
-
-export type ClientMsg =
-    | HelloMsg
-    | RequestMsg
-
-export type ServerMsg =
-    | HelloOkMsg
-    | HelloErrorMsg
-    | ResponseOkMsg
-    | ResponseErrorMsg
-
-// ### Hello
-
-export type HelloMsg = {
-    "type": "hello",
-    "jwt": string | null,
-}
-
-export type HelloOkMsg = {
-    "type": "hello_ok",
-}
-
-export type HelloErrorMsg = {
-    "type": "hello_error",
-    "error": Error,
-}
-
-// ### Request/response
-
-export type RequestMsg = {
-    "type": "request",
-    "request_id": int32,
-    "request": Request,
-}
-
-export type ResponseOkMsg = {
-    "type": "response_ok",
-    "request_id": int32,
-    "response": Response,
-}
-
-export type ResponseErrorMsg = {
-    "type": "response_error",
-    "request_id": int32,
-    "error": Error,
-}
-
-// ### Errors
+// ## Errors
 
 export type Error = {
     "message": string,
     "code"?: string | null,
 }
 
-// ## Requests
-
-export type Request =
-    | OpenStreamReq
-    | CloseStreamReq
-    | ExecuteReq
-    | BatchReq
-    | DescribeReq
-    | SequenceReq
-    | StoreSqlReq
-    | CloseSqlReq
-
-export type Response =
-    | OpenStreamResp
-    | CloseStreamResp
-    | ExecuteResp
-    | BatchResp
-    | DescribeResp
-    | SequenceResp
-    | StoreSqlResp
-    | CloseSqlResp
-
-// ### Open stream
-
-export type OpenStreamReq = {
-    "type": "open_stream",
-    "stream_id": int32,
-}
-
-export type OpenStreamResp = {
-    "type": "open_stream",
-}
-
-// ### Close stream
-
-export type CloseStreamReq = {
-    "type": "close_stream",
-    "stream_id": int32,
-}
-
-export type CloseStreamResp = {
-    "type": "close_stream",
-}
-
-// ### Execute a statement
-
-export type ExecuteReq = {
-    "type": "execute",
-    "stream_id": int32,
-    "stmt": Stmt,
-}
-
-export type ExecuteResp = {
-    "type": "execute",
-    "result": StmtResult,
-}
+// ## Statements
 
 export type Stmt = {
     "sql"?: string | undefined,
@@ -141,18 +38,7 @@ export type Col = {
     "decltype"?: string | null,
 }
 
-// ### Execute a batch
-
-export type BatchReq = {
-    "type": "batch",
-    "stream_id": int32,
-    "batch": Batch,
-}
-
-export type BatchResp = {
-    "type": "batch",
-    "result": BatchResult,
-}
+// ## Batches
 
 export type Batch = {
     "steps": Array<BatchStep>,
@@ -175,19 +61,7 @@ export type BatchCond =
     | { "type": "and", "conds": Array<BatchCond> }
     | { "type": "or", "conds": Array<BatchCond> }
 
-// ### Describe a statement
-
-export type DescribeReq = {
-    "type": "describe",
-    "stream_id": int32,
-    "sql"?: string | undefined,
-    "sql_id"?: int32 | undefined,
-}
-
-export type DescribeResp = {
-    "type": "describe",
-    "result": DescribeResult,
-}
+// ## Describe
 
 export type DescribeResult = {
     "params": Array<DescribeParam>,
@@ -205,43 +79,7 @@ export type DescribeCol = {
     "decltype": string | null,
 }
 
-// ### Execute a sequence of SQL statements
-
-export type SequenceReq = {
-    "type": "sequence",
-    "stream_id": int32,
-    "sql"?: string | null,
-    "sql_id"?: int32 | null,
-}
-
-export type SequenceResp = {
-    "type": "sequence",
-}
-
-// ### Store an SQL text on the server
-
-export type StoreSqlReq = {
-    "type": "store_sql",
-    "sql_id": int32,
-    "sql": string,
-}
-
-export type StoreSqlResp = {
-    "type": "store_sql",
-}
-
-// ### Close a stored SQL text
-
-export type CloseSqlReq = {
-    "type": "close_sql",
-    "sql_id": int32,
-}
-
-export type CloseSqlResp = {
-    "type": "close_sql",
-}
-
-// ### Values
+// ## Values
 
 export type Value =
     | { "type": "null" }

@@ -1,5 +1,5 @@
 import type * as proto from "./proto.js";
-import type { InSql } from "./sql.js";
+import type { InSql, SqlOwner } from "./sql.js";
 import { sqlToProto } from "./sql.js";
 import type { InValue } from "./value.js";
 import { valueToProto, protoNull } from "./value.js";
@@ -71,7 +71,7 @@ export class Stmt {
     }
 }
 
-export function stmtToProto(stmt: InStmt, wantRows: boolean): proto.Stmt {
+export function stmtToProto(sqlOwner: SqlOwner, stmt: InStmt, wantRows: boolean): proto.Stmt {
     let inSql: InSql;
     let args: Array<proto.Value> = [];
     let namedArgs: Array<proto.NamedArg> = [];
@@ -95,7 +95,7 @@ export function stmtToProto(stmt: InStmt, wantRows: boolean): proto.Stmt {
         inSql = stmt;
     }
 
-    const {sql, sqlId} = sqlToProto(inSql);
+    const {sql, sqlId} = sqlToProto(sqlOwner, inSql);
     return {
         "sql": sql,
         "sql_id": sqlId,

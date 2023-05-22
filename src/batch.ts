@@ -1,4 +1,3 @@
-import type { Client, StreamState } from "./client.js";
 import { ProtoError } from "./errors.js";
 import { IdAlloc } from "./id_alloc.js";
 import type * as proto from "./proto.js";
@@ -10,13 +9,14 @@ import {
 } from "./result.js";
 import type { InStmt } from "./stmt.js";
 import { stmtToProto } from "./stmt.js";
+import { Stream } from "./stream.js";
 import type { Value, InValue } from "./value.js";
 import { valueToProto, valueFromProto } from "./value.js";
 
 /** A builder for creating a batch and executing it on the server. */
 export class Batch {
-    #client: Client;
-    #streamState: StreamState;
+    /** @private */
+    _stream: Stream;
 
     #executed: boolean;
     /** @private */
@@ -25,9 +25,8 @@ export class Batch {
     _resultCallbacks: Array<(_: proto.BatchResult) => void>;
 
     /** @private */
-    constructor(client: Client, streamState: StreamState) {
-        this.#client = client;
-        this.#streamState = streamState;
+    constructor(stream: Stream) {
+        this._stream = stream;
         this.#executed = false;
 
         this._steps = [];
@@ -42,26 +41,17 @@ export class Batch {
     /** Execute the batch. */
     execute(): Promise<void> {
         if (this.#executed) {
-            throw new Error("The Batch has already been executed");
+            throw new Error("This batch has already been executed");
         }
         this.#executed = true;
 
-        return new Promise((doneCallback, errorCallback) => {
-            const request: proto.BatchReq = {
-                "type": "batch",
-                "stream_id": this.#streamState.streamId,
-                "batch": {
-                    "steps": this._steps,
-                },
-            };
-            const responseCallback = (response: proto.Response): void => {
-                const result = (response as proto.BatchResp)["result"];
-                for (const callback of this._resultCallbacks) {
-                    callback(result);
-                }
-                doneCallback();
-            };
-            this.#client._sendStreamRequest(this.#streamState, request, {responseCallback, errorCallback});
+        const batch: proto.Batch = {
+            "steps": this._steps,
+        };
+        return this._stream._batch(batch).then((result) => {
+            for (const callback of this._resultCallbacks) {
+                callback(result);
+            }
         });
     }
 }
@@ -89,25 +79,31 @@ export class BatchStep {
 
     /** Add a statement that returns rows. */
     query(stmt: InStmt): Promise<RowsResult | undefined> {
-        return this.#add(stmtToProto(stmt, true), rowsResultFromProto);
+        return this.#add(stmt, true, rowsResultFromProto);
     }
 
     /** Add a statement that returns at most a single row. */
     queryRow(stmt: InStmt): Promise<RowResult | undefined> {
-        return this.#add(stmtToProto(stmt, true), rowResultFromProto);
+        return this.#add(stmt, true, rowResultFromProto);
     }
 
     /** Add a statement returns at most a single value. */
     queryValue(stmt: InStmt): Promise<ValueResult | undefined> {
-        return this.#add(stmtToProto(stmt, true), valueResultFromProto);
+        return this.#add(stmt, true, valueResultFromProto);
     }
 
     /** Add a statement without returning rows. */
     run(stmt: InStmt): Promise<StmtResult | undefined> {
-        return this.#add(stmtToProto(stmt, false), stmtResultFromProto);
+        return this.#add(stmt, false, stmtResultFromProto);
     }
 
-    #add<T>(stmt: proto.Stmt, fromProto: (result: proto.StmtResult) => T): Promise<T | undefined> {
+    #add<T>(
+        inStmt: InStmt,
+        wantRows: boolean,
+        fromProto: (result: proto.StmtResult) => T,
+    ): Promise<T | undefined> {
+        const stmt = stmtToProto(this.#batch._stream._sqlOwner(), inStmt, wantRows);
+
         if (this._index !== undefined) {
             throw new Error("This step has already been added to the batch");
         }
