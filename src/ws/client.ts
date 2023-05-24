@@ -110,7 +110,7 @@ export class WsClient extends Client implements SqlOwner {
     }
 
     /** Get the protocol version negotiated with the server, possibly waiting until the socket is open. */
-    getVersion(): Promise<ProtocolVersion> {
+    override getVersion(): Promise<ProtocolVersion> {
         return new Promise((versionCallback, errorCallback) => {
             this.#getVersionCalled = true;
             if (this.#closed !== undefined) {

@@ -4,6 +4,7 @@ import { Client, protocolVersions } from "./client.js";
 import { WebSocketUnsupportedError } from "./errors.js";
 import type * as proto from "./proto.js";
 
+import { HttpClient } from "./http/client.js";
 import { WsClient } from "./ws/client.js";
 
 export type { ProtocolVersion } from "./client.js";
@@ -20,14 +21,21 @@ export { Stmt } from "./stmt.js";
 export { Stream } from "./stream.js";
 export type { Value, InValue } from "./value.js";
 
+export { HttpClient } from "./http/client.js";
+export { HttpStream } from "./http/stream.js";
 export { WsClient } from "./ws/client.js";
 export { WsStream } from "./ws/stream.js";
 
-/** Open a Hrana client connected to the given `url`. */
-export function open(url: string | URL, jwt?: string): WsClient {
+/** Open a Hrana client over WebSocket connected to the given `url`. */
+export function openWs(url: string | URL, jwt?: string): WsClient {
     if (typeof WebSocket === "undefined") {
         throw new WebSocketUnsupportedError("WebSockets are not supported in this environment");
     }
     const socket = new WebSocket(url, Array.from(protocolVersions.keys()));
     return new WsClient(socket, jwt ?? null);
+}
+
+/** Open a Hrana client over HTTP connected to the given `url`. */
+export function openHttp(url: string | URL, jwt?: string): HttpClient {
+    return new HttpClient(url instanceof URL ? url : new URL(url), jwt ?? null);
 }

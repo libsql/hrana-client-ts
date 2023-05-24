@@ -28,64 +28,54 @@ export class WsStream extends Stream {
 
     /** @private */
     override _execute(stmt: proto.Stmt): Promise<proto.StmtResult> {
-        return new Promise((resultCallback, errorCallback) => {
-            const request: proto.ExecuteReq = {
-                "type": "execute",
-                "stream_id": this.#state.streamId,
-                "stmt": stmt,
-            };
-            const responseCallback = (response: proto.Response): void => {
-                resultCallback((response as proto.ExecuteResp)["result"]);
-            };
-            this.#client._sendStreamRequest(this.#state, request, {responseCallback, errorCallback});
+        return this.#sendStreamRequest({
+            "type": "execute",
+            "stream_id": this.#state.streamId,
+            "stmt": stmt,
+        }).then((response) => {
+            return (response as proto.ExecuteResp)["result"];
         });
     }
 
     /** @private */
     override _batch(batch: proto.Batch): Promise<proto.BatchResult> {
-        return new Promise((resultCallback, errorCallback) => {
-            const request: proto.BatchReq = {
-                "type": "batch",
-                "stream_id": this.#state.streamId,
-                "batch": batch,
-            };
-            const responseCallback = (response: proto.Response): void => {
-                resultCallback((response as proto.BatchResp)["result"]);
-            };
-            this.#client._sendStreamRequest(this.#state, request, {responseCallback, errorCallback});
+        return this.#sendStreamRequest({
+            "type": "batch",
+            "stream_id": this.#state.streamId,
+            "batch": batch,
+        }).then((response) => {
+            return (response as proto.BatchResp)["result"];
         });
     }
 
     /** @private */
     override _describe(protoSql: ProtoSql): Promise<proto.DescribeResult> {
         this.#client._ensureVersion(2, "describe()");
-        return new Promise((resultCallback, errorCallback) => {
-            const request: proto.DescribeReq = {
-                "type": "describe",
-                "stream_id": this.#state.streamId,
-                "sql": protoSql.sql,
-                "sql_id": protoSql.sqlId,
-            };
-            const responseCallback = (response: proto.Response): void => {
-                resultCallback((response as proto.DescribeResp)["result"]);
-            };
-            this.#client._sendStreamRequest(this.#state, request, {responseCallback, errorCallback});
+        return this.#sendStreamRequest({
+            "type": "describe",
+            "stream_id": this.#state.streamId,
+            "sql": protoSql.sql,
+            "sql_id": protoSql.sqlId,
+        }).then((response) => {
+            return (response as proto.DescribeResp)["result"];
         });
     }
 
     /** @private */
     override _sequence(protoSql: ProtoSql): Promise<void> {
         this.#client._ensureVersion(2, "sequence()");
-        return new Promise((doneCallback, errorCallback) => {
-            const request: proto.SequenceReq = {
-                "type": "sequence",
-                "stream_id": this.#state.streamId,
-                "sql": protoSql.sql,
-                "sql_id": protoSql.sqlId,
-            };
-            const responseCallback = (_response: proto.Response): void => {
-                doneCallback();
-            };
+        return this.#sendStreamRequest({
+            "type": "sequence",
+            "stream_id": this.#state.streamId,
+            "sql": protoSql.sql,
+            "sql_id": protoSql.sqlId,
+        }).then((_response) => {
+            return undefined;
+        });
+    }
+
+    #sendStreamRequest(request: proto.Request): Promise<proto.Response> {
+        return new Promise((responseCallback, errorCallback) => {
             this.#client._sendStreamRequest(this.#state, request, {responseCallback, errorCallback});
         });
     }

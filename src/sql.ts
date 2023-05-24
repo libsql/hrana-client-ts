@@ -5,7 +5,9 @@ import { ClientError, ClosedError } from "./errors.js";
 export type InSql = string | Sql;
 
 export interface SqlOwner {
+    /** Cache a SQL text on the server. This requires protocol version 2 or higher. */
     storeSql(sql: string): Sql;
+
     /** @private */
     _closeSql(sqlState: SqlState, error: Error): void;
 }

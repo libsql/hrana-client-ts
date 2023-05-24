@@ -37,9 +37,14 @@ export class ResponseError extends ClientError {
 /** Error thrown when the client or stream is closed. */
 export class ClosedError extends ClientError {
     /** @private */
-    constructor(message: string, cause: Error) {
-        super(`${message}: ${cause}`);
-        this.cause = cause;
+    constructor(message: string, cause: Error | undefined) {
+        if (cause !== undefined) {
+            super(`${message}: ${cause}`);
+            this.cause = cause;
+        } else {
+            super(message);
+        }
+        this.name = "ClosedError";
     }
 }
 
@@ -58,6 +63,15 @@ export class WebSocketError extends ClientError {
     constructor(message: string) {
         super(message);
         this.name = "WebSocketError";
+    }
+}
+
+/** Error thrown when the HTTP server returns an error response. */
+export class HttpServerError extends ClientError {
+    /** @private */
+    constructor(message: string) {
+        super(message);
+        this.name = "HttpServerError";
     }
 }
 

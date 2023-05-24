@@ -1,12 +1,47 @@
 import * as hrana from "..";
 
-function withClient(f: (c: hrana.WsClient) => Promise<void>): () => Promise<void> {
+const url = process.env.URL ?? "ws://localhost:8080";
+const jwt = process.env.JWT;
+
+const isWs = url.startsWith("ws:") || url.startsWith("wss:");
+const isHttp = url.startsWith("http:") || url.startsWith("https:");
+
+function withClient(f: (c: hrana.Client) => Promise<void>): () => Promise<void> {
     return async () => {
-        const c = hrana.open(process.env.URL ?? "ws://localhost:8080", process.env.JWT);
+        let client: hrana.Client;
+        if (isWs) {
+            client = hrana.openWs(url, jwt);
+        } else if (isHttp) {
+            client = hrana.openHttp(url, jwt);
+        } else {
+            throw new Error("expected either ws or http URL");
+        }
         try {
-            await f(c);
+            await f(client);
         } finally {
-            c.close();
+            client.close();
+        }
+    };
+}
+
+function withWsClient(f: (c: hrana.WsClient) => Promise<void>): () => Promise<void> {
+    return async () => {
+        const client = hrana.openWs(url, jwt);
+        try {
+            await f(client);
+        } finally {
+            client.close();
+        }
+    };
+}
+
+function withHttpClient(f: (c: hrana.HttpClient) => Promise<void>): () => Promise<void> {
+    return async () => {
+        const client = hrana.openHttp(url, jwt);
+        try {
+            await f(client);
+        } finally {
+            client.close();
         }
     };
 }
@@ -320,6 +355,46 @@ test("concurrent operations are correctly ordered", withClient(async (c) => {
     await Promise.all(promises);
 }));
 
+describe("many stream operations", () => {
+    test("immediately after each other", withClient(async (c) => {
+        const s = c.openStream();
+        const promises: Array<Promise<hrana.ValueResult>> = [];
+        for (let i = 0; i < 100; ++i) {
+            promises.push(s.queryValue(["SELECT ?", [i]]));
+        }
+        for (let i = 0; i < promises.length; ++i) {
+            expect((await promises[i]).value).toStrictEqual(i);
+        }
+        s.close();
+    }));
+
+    test("in microtasks", withClient(async (c) => {
+        const s = c.openStream();
+        const promises: Array<Promise<hrana.ValueResult>> = [];
+        for (let i = 0; i < 100; ++i) {
+            promises.push(s.queryValue(["SELECT ?", [i]]));
+            await Promise.resolve();
+        }
+        for (let i = 0; i < promises.length; ++i) {
+            expect((await promises[i]).value).toStrictEqual(i);
+        }
+        s.close();
+    }));
+
+    test("in different ticks of event loop", withClient(async (c) => {
+        const s = c.openStream();
+        const promises: Array<Promise<hrana.ValueResult>> = [];
+        for (let i = 0; i < 100; ++i) {
+            promises.push(s.queryValue(["SELECT ?", [i]]));
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        for (let i = 0; i < promises.length; ++i) {
+            expect((await promises[i]).value).toStrictEqual(i);
+        }
+        s.close();
+    }));
+});
+
 describe("batches", () => {
     test("empty", withClient(async (c) => {
         const s = c.openStream();
@@ -485,7 +560,7 @@ describe("batches", () => {
         expect((await s.describe("COMMIT")).isReadonly).toStrictEqual(true);
     }));
 
-    test("without calling getVersion() first", withClient(async (c) => {
+    (isWs ? test : test.skip)("without calling getVersion() first", withWsClient(async (c) => {
         const s = c.openStream();
         expect(() => s.describe("SELECT 1")).toThrow(hrana.ProtocolVersionError);
     }));
@@ -521,25 +596,44 @@ describe("batches", () => {
 });
 
 (version >= 2 ? describe : describe.skip)("storeSql()", () => {
-    test("query", withClient(async (c) => {
-        await c.getVersion();
-        const sql = c.storeSql("SELECT 42");
-        const s = c.openStream();
+    function withSqlOwner(f: (s: hrana.Stream, owner: hrana.SqlOwner) => Promise<void>): () => Promise<void> {
+        return async () => {
+            if (isWs) {
+                const client = hrana.openWs(url, jwt);
+                try {
+                    await client.getVersion();
+                    const stream = client.openStream();
+                    await f(stream, client);
+                } finally {
+                    client.close();
+                }
+            } else if (isHttp) {
+                const client = hrana.openHttp(url, jwt);
+                try {
+                    const stream = client.openStream();
+                    await f(stream, stream);
+                } finally {
+                    client.close();
+                }
+            } else {
+                throw new Error("expected either ws or http URL");
+            }
+        };
+    }
+
+    test("query", withSqlOwner(async (s, owner) => {
+        const sql = owner.storeSql("SELECT 42");
         expect((await s.queryValue(sql)).value).toStrictEqual(42);
     }));
 
-    test("query with args", withClient(async (c) => {
-        await c.getVersion();
-        const sql = c.storeSql("SELECT ?");
-        const s = c.openStream();
+    test("query with args", withSqlOwner(async (s, owner) => {
+        const sql = owner.storeSql("SELECT ?");
         expect((await s.queryValue([sql, [42]])).value).toStrictEqual(42);
     }));
 
-    test("batch", withClient(async (c) => {
-        await c.getVersion();
-        const s = c.openStream();
-        const sql1 = c.storeSql("SELECT 11");
-        const sql2 = c.storeSql("SELECT 'one', 'two'");
+    test("batch", withSqlOwner(async (s, owner) => {
+        const sql1 = owner.storeSql("SELECT 11");
+        const sql2 = owner.storeSql("SELECT 'one', 'two'");
         const batch = s.batch();
         const prom1 = batch.step().queryValue(sql1);
         const prom2 = batch.step().queryRow(sql2);
@@ -549,23 +643,20 @@ describe("batches", () => {
         expect(Array.from((await prom2)!.row!)).toStrictEqual(["one", "two"]);
     }));
 
-    test("describe", withClient(async (c) => {
-        await c.getVersion();
-        const sql = c.storeSql("SELECT :a, $b");
-        const s = c.openStream();
+    test("describe", withSqlOwner(async (s, owner) => {
+        const sql = owner.storeSql("SELECT :a, $b");
         const d = await s.describe(sql);
         expect(d.paramNames).toStrictEqual([":a", "$b"]);
     }));
 
-    test("close", withClient(async (c) => {
-        await c.getVersion();
-        const sql = c.storeSql("SELECT :a, $b");
+    test("close", withSqlOwner(async (s, owner) => {
+        const sql = owner.storeSql("SELECT :a, $b");
         expect(sql.closed).toBe(false);
         sql.close();
         expect(sql.closed).toBe(true);
     }));
 
-    test("without calling getVersion() first", withClient(async (c) => {
+    (isWs ? test : test.skip)("without calling getVersion() first", withWsClient(async (c) => {
         expect(() => c.storeSql("SELECT 1")).toThrow(hrana.ProtocolVersionError);
     }));
 });
