@@ -147,7 +147,7 @@ export class HttpStream extends Stream implements SqlOwner {
         this.#closed = error;
         this.#client._streamClosed(this);
 
-        if (this.#baton !== null) {
+        if (this.#baton !== null || this.#pipeline.length !== 0 || this.#pipelineInProgress) {
             this.#pipeline.push({
                 request: {"type": "close"},
                 responseCallback() {},
@@ -159,7 +159,7 @@ export class HttpStream extends Stream implements SqlOwner {
 
     #sendStreamRequest(request: proto.StreamRequest): Promise<proto.StreamResponse> {
         if (this.#closed !== undefined) {
-            throw new ClosedError("Stream is closed", this.#closed);
+            return Promise.reject(new ClosedError("Stream is closed", this.#closed));
         }
         return new Promise((responseCallback, errorCallback) => {
             this.#pipeline.push({request, responseCallback, errorCallback});
@@ -192,6 +192,9 @@ export class HttpStream extends Stream implements SqlOwner {
             handlePipelineResponse(pipeline, respBody);
         }).catch((error) => {
             this.#setClosed(error);
+            for (const entry of pipeline) {
+                entry.errorCallback(error);
+            }
         }).finally(() => {
             this.#pipelineInProgress = false;
             this.#flushPipeline();
@@ -227,15 +230,10 @@ function handlePipelineResponse(pipeline: Array<PipelineEntry>, respBody: proto.
         const entry = pipeline[i];
 
         if (result["type"] === "ok") {
-            try {
-                if (result["response"]["type"] !== entry.request["type"]) {
-                    throw new ProtoError("Received unexpected type of response");
-                }
-                entry.responseCallback(result["response"]);
-            } catch (e) {
-                entry.errorCallback(e as Error);
-                throw e;
+            if (result["response"]["type"] !== entry.request["type"]) {
+                throw new ProtoError("Received unexpected type of response");
             }
+            entry.responseCallback(result["response"]);
         } else if (result["type"] === "error") {
             entry.errorCallback(errorFromProto(result["error"]));
         } else {

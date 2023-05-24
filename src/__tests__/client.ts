@@ -395,6 +395,41 @@ describe("many stream operations", () => {
     }));
 });
 
+describe("Stream.close()", () => {
+    test("marks the stream as closed", withClient(async (c) => {
+        const s = c.openStream();
+        await s.queryValue("SELECT 1");
+        expect(s.closed).toStrictEqual(false);
+        s.close();
+        expect(s.closed).toStrictEqual(true);
+    }));
+
+    test("close() is idempotent", withClient(async (c) => {
+        const s = c.openStream();
+        await s.queryValue("SELECT 1");
+        s.close();
+        s.close();
+    }));
+
+    test("close() does not interrupt previous operations", withClient(async (c) => {
+        const s = c.openStream();
+        const prom = s.queryValue("SELECT 1");
+        s.close();
+        expect((await prom).value).toStrictEqual(1);
+    }));
+
+    test("close() prevents further operations", withClient(async (c) => {
+        const s = c.openStream();
+        s.close();
+        await expect(s.queryValue("SELECT 1")).rejects.toThrow(hrana.ClosedError);
+    }));
+
+    test("close() without doing anything", withClient(async (c) => {
+        const s = c.openStream();
+        s.close();
+    }));
+});
+
 describe("batches", () => {
     test("empty", withClient(async (c) => {
         const s = c.openStream();
