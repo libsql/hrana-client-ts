@@ -1,7 +1,7 @@
 name: "CI"
 on:
   push:
-    branches: ["main"]
+    branches:
   pull_request:
 
 jobs:
@@ -37,11 +37,14 @@ jobs:
 
     - name: "Build"
       run: "npm run build"
-    - name: "Test version 1"
+    - name: "Test version 1 over WebSockets"
       run: "python hrana-test-server/server_v1.py npm test"
-      env: {"VERSION": "1"}
-    - name: "Test version 2"
+      env: {"VERSION": "1", "URL": "ws://localhost:8080"}
+    - name: "Test version 2 over WebSockets"
       run: "python hrana-test-server/server_v2.py npm test"
-      env: {"VERSION": "2"}
+      env: {"VERSION": "2", "URL": "ws://localhost:8080"}
+    - name: "Test version 2 over HTTP"
+      run: "python hrana-test-server/server_v2.py npm test"
+      env: {"VERSION": "2", "URL": "http://localhost:8080"}
     - name: "Example"
       run: "python hrana-test-server/server_v2.py node examples/readme_example.js"
