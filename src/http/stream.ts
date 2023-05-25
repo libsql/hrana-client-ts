@@ -250,12 +250,19 @@ async function errorFromResponse(resp: Response): Promise<Error> {
         if ("message" in respBody) {
             return errorFromProto(respBody as proto.Error);
         }
-    } else if (respType === "text/plain") {
-        const respBody = await resp.text();
-        return new HttpServerError(
-            `Server returned HTTP status ${resp.status} and error: ${respBody}`,
-            resp.status,
-        );
     }
-    return new HttpServerError(`Server returned HTTP status ${resp.status}`, resp.status);
+
+    let message = `Server returned HTTP status ${resp.status}`;
+    if (respType === "text/plain") {
+        const respBody = (await resp.text()).trim();
+        if (respBody !== "") {
+            message += `: ${respBody}`;
+        }
+    }
+
+    if (resp.status === 404) {
+        message += ". Maybe the server is outdated and does not support HTTP API v2?";
+    }
+
+    return new HttpServerError(message, resp.status);
 }

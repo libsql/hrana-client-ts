@@ -65,6 +65,10 @@ describe("parseLibsqlUrl()", () => {
         });
     });
 
+    test("invalid value for tls", () => {
+        expectParseError("ws://localhost?tls=yes", /"tls"/);
+    });
+
     test("authToken in query params", () => {
         expectParse("wss://localhost?authToken=foobar", {
             hranaWsUrl: "wss://localhost",
