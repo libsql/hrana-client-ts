@@ -68,9 +68,12 @@ export class WebSocketError extends ClientError {
 
 /** Error thrown when the HTTP server returns an error response. */
 export class HttpServerError extends ClientError {
+    status: number;
+
     /** @private */
-    constructor(message: string) {
+    constructor(message: string, status: number) {
         super(message);
+        this.status = status;
         this.name = "HttpServerError";
     }
 }

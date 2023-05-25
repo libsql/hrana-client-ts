@@ -254,7 +254,8 @@ async function errorFromResponse(resp: Response): Promise<Error> {
         const respBody = await resp.text();
         return new HttpServerError(
             `Server returned HTTP status ${resp.status} and error: ${respBody}`,
+            resp.status,
         );
     }
-    return new HttpServerError(`Server returned HTTP status ${resp.status}`);
+    return new HttpServerError(`Server returned HTTP status ${resp.status}`, resp.status);
 }
