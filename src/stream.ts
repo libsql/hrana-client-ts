@@ -14,6 +14,9 @@ import { stmtToProto } from "./stmt.js";
 
 /** A stream for executing SQL statements (a "database connection"). */
 export abstract class Stream {
+    /** @private */
+    constructor() {}
+
     /** @private*/
     abstract _sqlOwner(): SqlOwner;
     /** @private */

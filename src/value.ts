@@ -3,7 +3,7 @@ import { Base64 } from "js-base64";
 import { ClientError, ProtoError } from "./errors.js";
 import type * as proto from "./proto.js";
 
-/** JavaScript values that you can receive from the database in statement result. */
+/** JavaScript values that you can receive from the database in a statement result. */
 export type Value =
     | null
     | string

@@ -40,7 +40,7 @@ export class HttpClient extends Client {
         this.#streams.delete(stream);
     }
 
-    /** Close the client and the WebSocket. */
+    /** Close the client and all its streams. */
     override close(): void {
         this.#closed = true;
         for (const stream of Array.from(this.#streams)) {

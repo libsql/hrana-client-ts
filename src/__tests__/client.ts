@@ -694,6 +694,14 @@ describe("batches", () => {
     (isWs ? test : test.skip)("without calling getVersion() first", withWsClient(async (c) => {
         expect(() => c.storeSql("SELECT 1")).toThrow(hrana.ProtocolVersionError);
     }));
+
+    (isHttp ? test : test.skip)("using SQL stored on another stream", withHttpClient(async (c) => {
+        const s1 = c.openStream();
+        const s2 = c.openStream();
+
+        const sql = s1.storeSql("SELECT 1");
+        expect(() => s2.queryValue(sql)).toThrow(/SQL text/);
+    }));
 });
 
 test("getVersion()", withClient(async (c) => {

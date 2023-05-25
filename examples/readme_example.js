@@ -1,15 +1,19 @@
 import * as hrana from "@libsql/hrana-client";
 
 // Open a `hrana.Client`, which works like a connection pool in standard SQL
-// databases, but it uses just a single network connection internally
+// databases. 
 const url = process.env.URL ?? "ws://localhost:8080"; // Address of the sqld server
 const jwt = process.env.JWT; // JWT token for authentication
-const client = hrana.open(url, jwt);
+// Here we are using Hrana over WebSockets:
+const client = hrana.openWs(url, jwt);
+// But we can also use Hrana over HTTP:
+// const client = hrana.openHttp(url, jwt);
 
 // Open a `hrana.Stream`, which is an interactive SQL stream. This corresponds
 // to a "connection" from other SQL databases
 const stream = client.openStream();
 
+await stream.run("DROP TABLE IF EXISTS book");
 await stream.run(`CREATE TABLE book (
     id INTEGER PRIMARY KEY NOT NULL,
     author TEXT NOT NULL,

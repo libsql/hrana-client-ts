@@ -28,6 +28,7 @@ export class HttpStream extends Stream implements SqlOwner {
 
     #sqlIdAlloc: IdAlloc;
 
+    /** @private */
     constructor(client: HttpClient, baseUrl: URL, jwt: string | null) {
         super();
         this.#client = client;
@@ -47,7 +48,7 @@ export class HttpStream extends Stream implements SqlOwner {
         return this;
     }
 
-    /** Cache a SQL text on the server. This requires protocol version 2 or higher. */
+    /** Cache a SQL text on the server. */
     storeSql(sql: string): Sql {
         const sqlId = this.#sqlIdAlloc.alloc();
         const sqlState = {

@@ -9,6 +9,7 @@ import { WsClient } from "./ws/client.js";
 
 export type { ProtocolVersion } from "./client.js";
 export { Client } from "./client.js";
+export type { DescribeResult, DescribeColumn } from "./describe.js";
 export * from "./errors.js";
 export { Batch, BatchStep, BatchCond } from "./batch.js";
 export type { ParsedLibsqlUrl } from "./libsql_url.js";

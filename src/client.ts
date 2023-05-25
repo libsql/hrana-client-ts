@@ -8,6 +8,9 @@ export const protocolVersions: Map<string, ProtocolVersion> = new Map([
 
 /** A client for the Hrana protocol (a "database connection pool"). */
 export abstract class Client {
+    /** @private */
+    constructor() {}
+
     /** Get the protocol version negotiated with the server. */
     abstract getVersion(): Promise<ProtocolVersion>;
 
