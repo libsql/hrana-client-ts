@@ -27,7 +27,7 @@ export function valueToProto(value: InValue): proto.Value {
         return {"type": "text", "value": value};
     } else if (typeof value === "number") {
         if (!Number.isFinite(value)) {
-            throw new ClientError("Only finite numbers (not Infinity or NaN) can be passed as arguments");
+            throw new RangeError("Only finite numbers (not Infinity or NaN) can be passed as arguments");
         }
         return {"type": "float", "value": +value};
     } else if (typeof value === "bigint") {

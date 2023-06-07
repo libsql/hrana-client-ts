@@ -261,7 +261,7 @@ async function errorFromResponse(resp: Response): Promise<Error> {
     }
 
     if (resp.status === 404) {
-        message += ". Maybe the server is outdated and does not support HTTP API v2?";
+        message += ". It seems that the libsql server is outdated, please try updating the database.";
     }
 
     return new HttpServerError(message, resp.status);

@@ -6,5 +6,6 @@
     "visibilityFilters": {
         "inherited": true,
         "external": true
-    }
+    },
+    "includeVersion": true
 }
