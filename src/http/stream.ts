@@ -2,6 +2,7 @@ import { fetch, Request, Response, Headers } from "@libsql/isomorphic-fetch";
 
 import { ClientError, HttpServerError, ProtoError, ClosedError } from "../errors.js";
 import { IdAlloc } from "../id_alloc.js";
+import { queueMicrotask } from "../ponyfill.js";
 import { errorFromProto } from "../result.js";
 import type { SqlOwner, SqlState, ProtoSql } from "../sql.js";
 import { Sql } from "../sql.js";
