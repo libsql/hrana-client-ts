@@ -16,7 +16,7 @@ export class WsStream extends Stream {
 
     /** @private */
     constructor(client: WsClient, state: StreamState) {
-        super();
+        super(client.intMode);
         this.#client = client;
         this.#state = state;
     }

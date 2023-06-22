@@ -253,10 +253,57 @@ test("RegExp as argument", withClient(async (c) => {
     expect(res.value).toStrictEqual("/.*/");
 }));
 
-test("unsafe integer", withClient(async (c) => {
-    const s = c.openStream();
-    await expect(s.queryValue("SELECT 9007199254740992")).rejects.toBeInstanceOf(RangeError);
-}));
+describe("returned integers", () => {
+    describe("'number' int mode", () => {
+        test("integer returned as number", withClient(async (c) => {
+            c.intMode = "number";
+            const s = c.openStream();
+            const res = await s.queryValue("SELECT 42");
+            expect(typeof res.value).toStrictEqual("number");
+            expect(res.value).toStrictEqual(42);
+        }));
+
+        test("unsafe integer", withClient(async (c) => {
+            const s = c.openStream();
+            s.intMode = "number";
+            await expect(s.queryValue("SELECT 9007199254740992")).rejects.toBeInstanceOf(RangeError);
+        }));
+    });
+
+    describe("'bigint' int mode", () => {
+        test("integer returned as bigint", withClient(async (c) => {
+            c.intMode = "bigint";
+            const s = c.openStream();
+            const res = await s.queryValue("SELECT 42");
+            expect(typeof res.value).toStrictEqual("bigint");
+            expect(res.value).toStrictEqual(42n);
+        }));
+
+        test("large integer", withClient(async (c) => {
+            const s = c.openStream();
+            s.intMode = "bigint";
+            const res = await s.queryValue("SELECT 9007199254740992");
+            await expect(res.value).toStrictEqual(9007199254740992n);
+        }));
+    });
+
+    describe("'string' int mode", () => {
+        test("integer returned as string", withClient(async (c) => {
+            c.intMode = "string";
+            const s = c.openStream();
+            const res = await s.queryValue("SELECT 42");
+            expect(typeof res.value).toStrictEqual("string");
+            expect(res.value).toStrictEqual("42");
+        }));
+
+        test("large integer", withClient(async (c) => {
+            const s = c.openStream();
+            s.intMode = "string";
+            const res = await s.queryValue("SELECT 9007199254740992");
+            await expect(res.value).toStrictEqual("9007199254740992");
+        }));
+    });
+});
 
 test("response error", withClient(async (c) => {
     const s = c.openStream();

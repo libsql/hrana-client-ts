@@ -1,5 +1,5 @@
 import { ClientError, ProtoError, ResponseError } from "./errors.js";
-import type { Value } from "./value.js";
+import type { Value, IntMode } from "./value.js";
 import { valueFromProto } from "./value.js";
 import type * as proto from "./proto.js";
 
@@ -52,36 +52,40 @@ export function stmtResultFromProto(result: proto.StmtResult): StmtResult {
     };
 }
 
-export function rowsResultFromProto(result: proto.StmtResult): RowsResult {
+export function rowsResultFromProto(result: proto.StmtResult, intMode: IntMode): RowsResult {
     const stmtResult = stmtResultFromProto(result);
-    const rows = result["rows"].map(row => rowFromProto(stmtResult.columnNames, row));
+    const rows = result["rows"].map(row => rowFromProto(stmtResult.columnNames, row, intMode));
     return {...stmtResult, rows};
 }
 
-export function rowResultFromProto(result: proto.StmtResult): RowResult {
+export function rowResultFromProto(result: proto.StmtResult, intMode: IntMode): RowResult {
     const stmtResult = stmtResultFromProto(result);
     let row: Row | undefined;
     if (result.rows.length > 0) {
-        row = rowFromProto(stmtResult.columnNames, result.rows[0]);
+        row = rowFromProto(stmtResult.columnNames, result.rows[0], intMode);
     }
     return {...stmtResult, row};
 }
 
-export function valueResultFromProto(result: proto.StmtResult): ValueResult {
+export function valueResultFromProto(result: proto.StmtResult, intMode: IntMode): ValueResult {
     const stmtResult = stmtResultFromProto(result);
     let value: Value | undefined;
     if (result.rows.length > 0 && stmtResult.columnNames.length > 0) {
-        value = valueFromProto(result.rows[0][0]);
+        value = valueFromProto(result.rows[0][0], intMode);
     }
     return {...stmtResult, value};
 }
 
-function rowFromProto(colNames: Array<string | undefined>, values: Array<proto.Value>): Row {
+function rowFromProto(
+    colNames: Array<string | undefined>,
+    values: Array<proto.Value>,
+    intMode: IntMode,
+): Row {
     const row = {};
     // make sure that the "length" property is not enumerable
     Object.defineProperty(row, "length", { value: values.length });
     for (let i = 0; i < values.length; ++i) {
-        const value = valueFromProto(values[i]);
+        const value = valueFromProto(values[i], intMode);
         Object.defineProperty(row, i, { value });
 
         const colName = colNames[i];

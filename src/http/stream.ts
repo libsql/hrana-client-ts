@@ -31,7 +31,7 @@ export class HttpStream extends Stream implements SqlOwner {
 
     /** @private */
     constructor(client: HttpClient, baseUrl: URL, jwt: string | null) {
-        super();
+        super(client.intMode);
         this.#client = client;
         this.#baseUrl = baseUrl.toString();
         this.#jwt = jwt;

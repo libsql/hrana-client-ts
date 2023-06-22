@@ -20,6 +20,17 @@ export type InValue =
     | RegExp
     | object
 
+/** Possible representations of SQLite integers in JavaScript:
+ *
+ * - `"number"` (default): returns SQLite integers as JavaScript `number`-s (double precision floats).
+ * `number` cannot precisely represent integers larger than 2^53-1 in absolute value, so attempting to read
+ * larger integers will throw a `RangeError`.
+ * - `"bigint"`: returns SQLite integers as JavaScript `bigint`-s (arbitrary precision integers). Bigints can
+ * precisely represent all SQLite integers.
+ * - `"string"`: returns SQLite integers as strings.
+ */
+export type IntMode = "number" | "bigint" | "string";
+
 export function valueToProto(value: InValue): proto.Value {
     if (value === null) {
         return protoNull;
@@ -33,7 +44,7 @@ export function valueToProto(value: InValue): proto.Value {
     } else if (typeof value === "bigint") {
         if (value < minInteger || value > maxInteger) {
             throw new RangeError(
-                "bigint is too large to be represented as a 64-bit integer and passed as argument"
+                "This bigint value is too large to be represented as a 64-bit integer and passed as argument"
             );
         }
         return {"type": "integer", "value": ""+value};
@@ -57,17 +68,25 @@ const maxInteger = 9223372036854775807n;
 
 export const protoNull: proto.Value = {"type": "null"};
 
-export function valueFromProto(value: proto.Value): Value {
+export function valueFromProto(value: proto.Value, intMode: IntMode): Value {
     if (value["type"] === "null") {
         return null;
     } else if (value["type"] === "integer") {
-        // TODO: add an option to return integers as bigints
-        const int = parseInt(value["value"], 10);
-        if (!Number.isSafeInteger(int)) {
-            throw new RangeError(`Received integer ${value["value"]} which cannot be ` +
-                "safely represented as a JavaScript number");
+        if (intMode === "number") {
+            const int = parseInt(value["value"], 10);
+            if (!Number.isSafeInteger(int)) {
+                throw new RangeError(
+                    "Received integer which cannot be safely represented as a JavaScript number"
+                );
+            }
+            return int;
+        } else if (intMode === "bigint") {
+            return BigInt(value["value"]);
+        } else if (intMode === "string") {
+            return ""+value["value"];
+        } else {
+            throw new Error("Invalid value for IntMode");
         }
-        return int;
     } else if (value["type"] === "float") {
         return +value["value"];
     } else if (value["type"] === "text") {

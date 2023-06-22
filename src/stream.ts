@@ -11,11 +11,14 @@ import type { InSql, SqlOwner, ProtoSql } from "./sql.js";
 import { sqlToProto } from "./sql.js";
 import type { InStmt } from "./stmt.js";
 import { stmtToProto } from "./stmt.js";
+import type { IntMode } from "./value.js";
 
 /** A stream for executing SQL statements (a "database connection"). */
 export abstract class Stream {
     /** @private */
-    constructor() {}
+    constructor(intMode: IntMode) {
+        this.intMode = intMode;
+    }
 
     /** @private*/
     abstract _sqlOwner(): SqlOwner;
@@ -48,9 +51,13 @@ export abstract class Stream {
         return this.#execute(stmt, false, stmtResultFromProto);
     }
 
-    #execute<T>(inStmt: InStmt, wantRows: boolean, fromProto: (result: proto.StmtResult) => T): Promise<T> {
+    #execute<T>(
+        inStmt: InStmt,
+        wantRows: boolean,
+        fromProto: (result: proto.StmtResult, intMode: IntMode) => T,
+    ): Promise<T> {
         const stmt = stmtToProto(this._sqlOwner(), inStmt, wantRows);
-        return this._execute(stmt).then(fromProto);
+        return this._execute(stmt).then((r) => fromProto(r, this.intMode));
     }
 
     /** Return a builder for creating and executing a batch. */
@@ -76,4 +83,10 @@ export abstract class Stream {
 
     /** True if the stream is closed. */
     abstract get closed(): boolean;
+
+    /** Representation of integers returned from the database. See {@link IntMode}.
+     *
+     * This value affects the results of all operations on this stream.
+     */
+    intMode: IntMode;
 }

@@ -20,7 +20,7 @@ export { Sql } from "./sql.js";
 export type { InStmt, InStmtArgs } from "./stmt.js";
 export { Stmt } from "./stmt.js";
 export { Stream } from "./stream.js";
-export type { Value, InValue } from "./value.js";
+export type { Value, InValue, IntMode } from "./value.js";
 
 export { HttpClient } from "./http/client.js";
 export { HttpStream } from "./http/stream.js";

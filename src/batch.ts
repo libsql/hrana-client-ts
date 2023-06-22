@@ -10,7 +10,7 @@ import {
 import type { InStmt } from "./stmt.js";
 import { stmtToProto } from "./stmt.js";
 import { Stream } from "./stream.js";
-import type { Value, InValue } from "./value.js";
+import type { Value, InValue, IntMode } from "./value.js";
 import { valueToProto, valueFromProto } from "./value.js";
 
 /** A builder for creating a batch and executing it on the server. */
@@ -100,7 +100,7 @@ export class BatchStep {
     #add<T>(
         inStmt: InStmt,
         wantRows: boolean,
-        fromProto: (result: proto.StmtResult) => T,
+        fromProto: (result: proto.StmtResult, intMode: IntMode) => T,
     ): Promise<T | undefined> {
         const stmt = stmtToProto(this.#batch._stream._sqlOwner(), inStmt, wantRows);
 
@@ -135,7 +135,7 @@ export class BatchStep {
                 } else if (stepError !== null) {
                     errorCallback(errorFromProto(stepError));
                 } else if (stepResult !== null) {
-                    outputCallback(fromProto(stepResult));
+                    outputCallback(fromProto(stepResult, this.#batch._stream.intMode));
                 } else {
                     outputCallback(undefined);
                 }

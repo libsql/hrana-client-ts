@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added `IntMode`, `Client.intMode` and `Stream.intMode`
+
 ## 0.4.1 -- 2023-06-12
 
 - Fixed environments that don't support `queueMicrotask()` by implementing a ponyfill [libsql-client-ts#47](https://github.com/libsql/libsql-client-ts/issues/47)
