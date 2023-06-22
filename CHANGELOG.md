@@ -1,5 +1,7 @@
 # Changelog
 
+## Unreleased
+
 ## 0.4.2 -- 2023-06-22
 
 - Added `IntMode`, `Client.intMode` and `Stream.intMode`
