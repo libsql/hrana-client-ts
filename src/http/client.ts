@@ -1,3 +1,5 @@
+import { fetch } from "@libsql/isomorphic-fetch";
+
 import type { ProtocolVersion } from "../client.js";
 import { Client } from "../client.js";
 import { ClosedError } from "../errors.js";
@@ -8,14 +10,16 @@ import { HttpStream } from "./stream.js";
 export class HttpClient extends Client {
     #url: URL;
     #jwt: string | null;
+    #fetch: typeof fetch;
     #closed: boolean;
     #streams: Set<HttpStream>;
 
     /** @private */
-    constructor(url: URL, jwt: string | null) {
+    constructor(url: URL, jwt: string | null, customFetch: unknown | undefined) {
         super();
         this.#url = url;
         this.#jwt = jwt;
+        this.#fetch = (customFetch as typeof fetch) ?? fetch;
         this.#closed = false;
         this.#streams = new Set();
     }
@@ -30,7 +34,7 @@ export class HttpClient extends Client {
         if (this.#closed) {
             throw new ClosedError("Client is closed", undefined);
         }
-        const stream = new HttpStream(this, this.#url, this.#jwt);
+        const stream = new HttpStream(this, this.#url, this.#jwt, this.#fetch);
         this.#streams.add(stream);
         return stream;
     }

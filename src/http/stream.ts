@@ -1,4 +1,5 @@
-import { fetch, Request, Response, Headers } from "@libsql/isomorphic-fetch";
+import type { fetch, Response } from "@libsql/isomorphic-fetch";
+import { Request, Headers } from "@libsql/isomorphic-fetch";
 
 import { ClientError, HttpServerError, ProtoError, ClosedError } from "../errors.js";
 import { IdAlloc } from "../id_alloc.js";
@@ -21,6 +22,7 @@ export class HttpStream extends Stream implements SqlOwner {
     #client: HttpClient;
     #baseUrl: string;
     #jwt: string | null;
+    #fetch: typeof fetch;
 
     #closed: Error | undefined;
     #baton: string | null;
@@ -30,11 +32,12 @@ export class HttpStream extends Stream implements SqlOwner {
     #sqlIdAlloc: IdAlloc;
 
     /** @private */
-    constructor(client: HttpClient, baseUrl: URL, jwt: string | null) {
+    constructor(client: HttpClient, baseUrl: URL, jwt: string | null, customFetch: typeof fetch) {
         super(client.intMode);
         this.#client = client;
         this.#baseUrl = baseUrl.toString();
         this.#jwt = jwt;
+        this.#fetch = customFetch;
 
         this.#closed = undefined;
         this.#baton = null;
@@ -175,8 +178,16 @@ export class HttpStream extends Stream implements SqlOwner {
         }
 
         const pipeline = Array.from(this.#pipeline);
-        const request = this.#createPipelineRequest(pipeline);
-        const promise = fetch(request);
+
+        let promise;
+        try {
+            const request = this.#createPipelineRequest(pipeline);
+            const fetch = this.#fetch;
+            promise = fetch(request);
+        } catch (error) {
+            promise = Promise.reject(error);
+        }
+
         this.#pipelineInProgress = true;
         this.#pipeline.length = 0;
 

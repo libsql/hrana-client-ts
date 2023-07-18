@@ -36,7 +36,12 @@ export function openWs(url: string | URL, jwt?: string): WsClient {
     return new WsClient(socket, jwt ?? null);
 }
 
-/** Open a Hrana client over HTTP connected to the given `url`. */
-export function openHttp(url: string | URL, jwt?: string): HttpClient {
-    return new HttpClient(url instanceof URL ? url : new URL(url), jwt ?? null);
+/** Open a Hrana client over HTTP connected to the given `url`.
+ *
+ * If the `customFetch` argument is passed and not `undefined`, it is used in place of the `fetch` function
+ * from `@libsql/isomorphic-fetch`. This function is always called with a `Request` object from
+ * `@libsql/isomorphic-fetch`.
+ */
+export function openHttp(url: string | URL, jwt?: string, customFetch?: unknown | undefined): HttpClient {
+    return new HttpClient(url instanceof URL ? url : new URL(url), jwt ?? null, customFetch);
 }

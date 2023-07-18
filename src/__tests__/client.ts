@@ -1,3 +1,5 @@
+import { fetch, Request, Response } from "@libsql/isomorphic-fetch";
+
 import * as hrana from "..";
 
 const url = process.env.URL ?? "ws://localhost:8080";
@@ -754,3 +756,61 @@ describe("batches", () => {
 test("getVersion()", withClient(async (c) => {
     expect(await c.getVersion()).toBeGreaterThanOrEqual(version);
 }));
+
+(isHttp ? describe : describe.skip)("customFetch", () => {
+    test("custom function is called", async () => {
+        let fetchCalledCount = 0;
+
+        async function customFetch(this: unknown, request: Request): Promise<Response> {
+            expect(request).toBeInstanceOf(Request);
+            expect(this === undefined || this === globalThis).toBe(true);
+
+            expect(request.method).toStrictEqual("POST");
+            expect(request.url.startsWith(url)).toBe(true);
+
+            fetchCalledCount += 1;
+            return fetch(request);
+        }
+
+        const c = hrana.openHttp(url, jwt, customFetch);
+        try {
+            const s = c.openStream();
+            const res = await s.queryValue("SELECT 1");
+            expect(res.value).toStrictEqual(1);
+
+            expect(fetchCalledCount).toStrictEqual(1);
+        } finally {
+            c.close();
+        }
+    });
+
+    test("exception thrown from the custom function", async () => {
+        function customFetch() {
+            throw new Error("testing exception thrown from customFetch()");
+        }
+
+        const c = hrana.openHttp(url, jwt, customFetch);
+        try {
+            const s = c.openStream();
+            await expect(s.queryValue("SELECT 1")).rejects
+                .toThrow("testing exception thrown from customFetch()");
+        } finally {
+            c.close();
+        }
+    });
+
+    test("rejected promise returned from the custom function", async () => {
+        function customFetch(): Promise<Response> {
+            return Promise.reject(new Error("testing rejection returned from customFetch()"));
+        }
+
+        const c = hrana.openHttp(url, jwt, customFetch);
+        try {
+            const s = c.openStream();
+            await expect(s.queryValue("SELECT 1")).rejects
+                .toThrow("testing rejection returned from customFetch()");
+        } finally {
+            c.close();
+        }
+    });
+});

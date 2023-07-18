@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added `customFetch` argument to `openHttp()` to override the `fetch()` function
+
 ## 0.4.2 -- 2023-06-22
 
 - Added `IntMode`, `Client.intMode` and `Stream.intMode`
