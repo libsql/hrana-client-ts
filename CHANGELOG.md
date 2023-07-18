@@ -1,5 +1,7 @@
 # Changelog
 
+## Unreleased
+
 ## 0.4.3 -- 2023-07-18
 
 - Added `customFetch` argument to `openHttp()` to override the `fetch()` function
