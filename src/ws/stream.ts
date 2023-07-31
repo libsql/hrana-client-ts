@@ -29,9 +29,9 @@ export class WsStream extends Stream {
     /** @private */
     override _execute(stmt: proto.Stmt): Promise<proto.StmtResult> {
         return this.#sendStreamRequest({
-            "type": "execute",
-            "stream_id": this.#state.streamId,
-            "stmt": stmt,
+            type: "execute",
+            streamId: this.#state.streamId,
+            stmt,
         }).then((response) => {
             return (response as proto.ExecuteResp)["result"];
         });
@@ -40,9 +40,9 @@ export class WsStream extends Stream {
     /** @private */
     override _batch(batch: proto.Batch): Promise<proto.BatchResult> {
         return this.#sendStreamRequest({
-            "type": "batch",
-            "stream_id": this.#state.streamId,
-            "batch": batch,
+            type: "batch",
+            streamId: this.#state.streamId,
+            batch,
         }).then((response) => {
             return (response as proto.BatchResp)["result"];
         });
@@ -52,10 +52,10 @@ export class WsStream extends Stream {
     override _describe(protoSql: ProtoSql): Promise<proto.DescribeResult> {
         this.#client._ensureVersion(2, "describe()");
         return this.#sendStreamRequest({
-            "type": "describe",
-            "stream_id": this.#state.streamId,
-            "sql": protoSql.sql,
-            "sql_id": protoSql.sqlId,
+            type: "describe",
+            streamId: this.#state.streamId,
+            sql: protoSql.sql,
+            sqlId: protoSql.sqlId,
         }).then((response) => {
             return (response as proto.DescribeResp)["result"];
         });
@@ -65,10 +65,10 @@ export class WsStream extends Stream {
     override _sequence(protoSql: ProtoSql): Promise<void> {
         this.#client._ensureVersion(2, "sequence()");
         return this.#sendStreamRequest({
-            "type": "sequence",
-            "stream_id": this.#state.streamId,
-            "sql": protoSql.sql,
-            "sql_id": protoSql.sqlId,
+            type: "sequence",
+            streamId: this.#state.streamId,
+            sql: protoSql.sql,
+            sqlId: protoSql.sqlId,
         }).then((_response) => {
             return undefined;
         });

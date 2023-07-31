@@ -1,13 +1,12 @@
 import { WebSocket } from "@libsql/isomorphic-ws";
 
-import { Client, protocolVersions } from "./client.js";
+import { subprotocols } from "./ws/client.js";
 import { WebSocketUnsupportedError } from "./errors.js";
-import type * as proto from "./proto.js";
 
 import { HttpClient } from "./http/client.js";
 import { WsClient } from "./ws/client.js";
 
-export type { ProtocolVersion } from "./client.js";
+export type { ProtocolVersion, ProtocolEncoding } from "./client.js";
 export { Client } from "./client.js";
 export type { DescribeResult, DescribeColumn } from "./describe.js";
 export * from "./errors.js";
@@ -32,8 +31,8 @@ export function openWs(url: string | URL, jwt?: string): WsClient {
     if (typeof WebSocket === "undefined") {
         throw new WebSocketUnsupportedError("WebSockets are not supported in this environment");
     }
-    const socket = new WebSocket(url, Array.from(protocolVersions.keys()));
-    return new WsClient(socket, jwt ?? null);
+    const socket = new WebSocket(url, Array.from(subprotocols.keys()));
+    return new WsClient(socket, jwt);
 }
 
 /** Open a Hrana client over HTTP connected to the given `url`.
@@ -43,5 +42,5 @@ export function openWs(url: string | URL, jwt?: string): WsClient {
  * `@libsql/isomorphic-fetch`.
  */
 export function openHttp(url: string | URL, jwt?: string, customFetch?: unknown | undefined): HttpClient {
-    return new HttpClient(url instanceof URL ? url : new URL(url), jwt ?? null, customFetch);
+    return new HttpClient(url instanceof URL ? url : new URL(url), jwt, customFetch);
 }

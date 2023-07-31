@@ -1,11 +1,8 @@
 import type { Stream } from "./stream.js";
 import type { IntMode } from "./value.js";
 
-export type ProtocolVersion = 1 | 2;
-export const protocolVersions: Map<string, ProtocolVersion> = new Map([
-    ["hrana2", 2],
-    ["hrana1", 1],
-]);
+export type ProtocolVersion = 1 | 2 | 3;
+export type ProtocolEncoding = "json" | "protobuf";
 
 /** A client for the Hrana protocol (a "database connection pool"). */
 export abstract class Client {

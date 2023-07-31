@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Added support for Hrana 3**, which included some API changes:
+    - Added variant `3` to the `ProtocolVersion` type
+- Changed type of `StmtResult.lastInsertRowid` to bigint
+
 ## 0.4.3 -- 2023-07-18
 
 - Added `customFetch` argument to `openHttp()` to override the `fetch()` function

@@ -1,12 +1,12 @@
 import { Batch } from "./batch.js";
 import type { DescribeResult } from "./describe.js";
 import { describeResultFromProto } from "./describe.js";
-import type * as proto from "./proto.js";
 import type { RowsResult, RowResult, ValueResult, StmtResult } from "./result.js";
 import {
     stmtResultFromProto, rowsResultFromProto,
     rowResultFromProto, valueResultFromProto,
 } from "./result.js";
+import type * as proto from "./shared/proto.js";
 import type { InSql, SqlOwner, ProtoSql } from "./sql.js";
 import { sqlToProto } from "./sql.js";
 import type { InStmt } from "./stmt.js";
@@ -20,7 +20,7 @@ export abstract class Stream {
         this.intMode = intMode;
     }
 
-    /** @private*/
+    /** @private */
     abstract _sqlOwner(): SqlOwner;
     /** @private */
     abstract _execute(stmt: proto.Stmt): Promise<proto.StmtResult>;

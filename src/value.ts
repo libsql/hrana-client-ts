@@ -1,7 +1,6 @@
-import { Base64 } from "js-base64";
-
 import { ClientError, ProtoError } from "./errors.js";
-import type * as proto from "./proto.js";
+import type * as proto from "./shared/proto.js";
+import { impossible } from "./util.js";
 
 /** JavaScript values that you can receive from the database in a statement result. */
 export type Value =
@@ -33,31 +32,31 @@ export type IntMode = "number" | "bigint" | "string";
 
 export function valueToProto(value: InValue): proto.Value {
     if (value === null) {
-        return protoNull;
+        return null;
     } else if (typeof value === "string") {
-        return {"type": "text", "value": value};
+        return value;
     } else if (typeof value === "number") {
         if (!Number.isFinite(value)) {
             throw new RangeError("Only finite numbers (not Infinity or NaN) can be passed as arguments");
         }
-        return {"type": "float", "value": +value};
+        return value;
     } else if (typeof value === "bigint") {
         if (value < minInteger || value > maxInteger) {
             throw new RangeError(
                 "This bigint value is too large to be represented as a 64-bit integer and passed as argument"
             );
         }
-        return {"type": "integer", "value": ""+value};
+        return value;
     } else if (typeof value === "boolean") {
-        return {"type": "integer", "value": value ? "1" : "0"};
+        return value ? 1n : 0n;
     } else if (value instanceof ArrayBuffer) {
-        return {"type": "blob", "base64": Base64.fromUint8Array(new Uint8Array(value))};
+        return new Uint8Array(value);
     } else if (value instanceof Uint8Array) {
-        return {"type": "blob", "base64": Base64.fromUint8Array(value)};
+        return value;
     } else if (value instanceof Date) {
-        return {"type": "float", "value": value.valueOf()};
+        return +value.valueOf();
     } else if (typeof value === "object") {
-        return {"type": "text", "value": value.toString()};
+        return ""+value.toString();
     } else {
         throw new TypeError("Unsupported type of value");
     }
@@ -66,35 +65,40 @@ export function valueToProto(value: InValue): proto.Value {
 const minInteger = -9223372036854775808n;
 const maxInteger = 9223372036854775807n;
 
-export const protoNull: proto.Value = {"type": "null"};
+export const protoNull: proto.Value = null;
 
 export function valueFromProto(value: proto.Value, intMode: IntMode): Value {
-    if (value["type"] === "null") {
+    if (value === null) {
         return null;
-    } else if (value["type"] === "integer") {
+    } else if (typeof value === "number") {
+        return value;
+    } else if (typeof value === "string") {
+        return value;
+    } else if (typeof value === "bigint") {
         if (intMode === "number") {
-            const int = parseInt(value["value"], 10);
-            if (!Number.isSafeInteger(int)) {
+            const num = Number(value);
+            if (!Number.isSafeInteger(num)) {
                 throw new RangeError(
-                    "Received integer which cannot be safely represented as a JavaScript number"
+                    "Received integer which is too large to be safely represented as a JavaScript number"
                 );
             }
-            return int;
+            return num;
         } else if (intMode === "bigint") {
-            return BigInt(value["value"]);
+            return value;
         } else if (intMode === "string") {
-            return ""+value["value"];
+            return ""+value;
         } else {
             throw new Error("Invalid value for IntMode");
         }
-    } else if (value["type"] === "float") {
-        return +value["value"];
-    } else if (value["type"] === "text") {
-        return ""+value["value"];
-    } else if (value["type"] === "blob") {
-        return Base64.toUint8Array(value["base64"]).buffer;
+    } else if (value instanceof Uint8Array) {
+        // TODO: we need to copy data from `Uint8Array` to return an `ArrayBuffer`. Perhaps we should add a
+        // `blobMode` parameter, similar to `intMode`, which would allow the user to choose between receiving
+        // `ArrayBuffer` (default, convenient) and `Uint8Array` (zero copy)?
+        return value.slice().buffer;
+    } else if (value === undefined) {
+        throw new ProtoError("Received unrecognized variant of Value");
     } else {
-        throw new ProtoError("Unexpected value type");
+        throw impossible(value, "Impossible type of Value");
     }
 }
 

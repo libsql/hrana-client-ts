@@ -1,6 +1,6 @@
 {
   "name": "@libsql/hrana-client",
-  "version": "0.4.4-pre",
+  "version": "0.5.0-pre",
   "keywords": [
     "hrana",
     "libsql",
@@ -44,7 +44,7 @@
     "clean-build": "npm run clean && npm run build",
 
     "typecheck": "tsc --noEmit",
-    "test": "jest",
+    "test": "jest --runInBand",
     "typedoc": "rm -rf ./docs && typedoc"
   },
 

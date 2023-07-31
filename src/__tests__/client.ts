@@ -143,7 +143,7 @@ test("Stream.run()", withClient(async (c) => {
     res = await s.run("INSERT INTO t VALUES (1, 'one'), (2, 'two'), (3, 'three')");
     expect(res.affectedRowCount).toStrictEqual(3);
     expect(res.lastInsertRowid).toBeDefined();
-    expect(res.lastInsertRowid).not.toStrictEqual("0");
+    expect(res.lastInsertRowid).not.toStrictEqual(0n);
 
     const rowsRes = await s.query("SELECT * FROM t ORDER BY num");
     expect(rowsRes.rows.length).toStrictEqual(3);
@@ -320,13 +320,13 @@ test("last insert rowid", withClient(async (c) => {
     await s.run("CREATE TABLE t (id INTEGER PRIMARY KEY)");
 
     let res = await s.run("INSERT INTO t VALUES (123)");
-    expect(res.lastInsertRowid).toStrictEqual("123");
+    expect(res.lastInsertRowid).toStrictEqual(123n);
 
     res = await s.run("INSERT INTO t VALUES (9223372036854775807)");
-    expect(res.lastInsertRowid).toStrictEqual("9223372036854775807");
+    expect(res.lastInsertRowid).toStrictEqual(9223372036854775807n);
 
     res = await s.run("INSERT INTO t VALUES (-9223372036854775808)");
-    expect(res.lastInsertRowid).toStrictEqual("-9223372036854775808");
+    expect(res.lastInsertRowid).toStrictEqual(-9223372036854775808n);
 }));
 
 test("column names", withClient(async (c) => {

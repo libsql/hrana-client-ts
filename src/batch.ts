@@ -1,12 +1,12 @@
 import { ProtoError } from "./errors.js";
 import { IdAlloc } from "./id_alloc.js";
-import type * as proto from "./proto.js";
 import type { RowsResult, RowResult, ValueResult, StmtResult } from "./result.js";
 import {
     stmtResultFromProto, rowsResultFromProto,
     rowResultFromProto, valueResultFromProto,
     errorFromProto,
 } from "./result.js";
+import type * as proto from "./shared/proto.js";
 import type { InStmt } from "./stmt.js";
 import { stmtToProto } from "./stmt.js";
 import { Stream } from "./stream.js";
@@ -46,7 +46,7 @@ export class Batch {
         this.#executed = true;
 
         const batch: proto.Batch = {
-            "steps": this._steps,
+            steps: this._steps,
         };
         return this._stream._batch(batch).then((result) => {
             for (const callback of this._resultCallbacks) {
@@ -110,31 +110,26 @@ export class BatchStep {
         const index = this.#batch._steps.length;
         this._index = index;
 
-        let condition: proto.BatchCond | null;
+        let condition: proto.BatchCond | undefined;
         if (this.#conditions.length === 0) {
-            condition = null;
+            condition = undefined;
         } else if (this.#conditions.length === 1) {
             condition = this.#conditions[0];
         } else {
-            condition = {"type": "and", "conds": this.#conditions};
+            condition = {type: "and", conds: this.#conditions};
         }
 
-        this.#batch._steps.push({
-            "stmt": stmt,
-            "condition": condition,
-        });
+        this.#batch._steps.push({stmt, condition});
 
         return new Promise((outputCallback, errorCallback) => {
             this.#batch._resultCallbacks.push((result) => {
-                const stepResult = result["step_results"][index];
-                const stepError = result["step_errors"][index];
-                if (stepResult === undefined || stepError === undefined) {
-                    errorCallback(new ProtoError("Server returned fewer step results than expected"));
-                } else if (stepResult !== null && stepError !== null) {
+                const stepResult = result.stepResults.get(index);
+                const stepError = result.stepErrors.get(index);
+                if (stepResult !== undefined && stepError !== undefined) {
                     errorCallback(new ProtoError("Server returned both result and error"));
-                } else if (stepError !== null) {
+                } else if (stepError !== undefined) {
                     errorCallback(errorFromProto(stepError));
-                } else if (stepResult !== null) {
+                } else if (stepResult !== undefined) {
                     outputCallback(fromProto(stepResult, this.#batch._stream.intMode));
                 } else {
                     outputCallback(undefined);
@@ -154,23 +149,23 @@ export class BatchCond {
     }
 
     static ok(step: BatchStep): BatchCond {
-        return new BatchCond({"type": "ok", "step": stepIndex(step)});
+        return new BatchCond({type: "ok", step: stepIndex(step)});
     }
 
     static error(step: BatchStep): BatchCond {
-        return new BatchCond({"type": "error", "step": stepIndex(step)});
+        return new BatchCond({type: "error", step: stepIndex(step)});
     }
 
     static not(cond: BatchCond): BatchCond {
-        return new BatchCond({"type": "not", "cond": cond._proto});
+        return new BatchCond({type: "not", cond: cond._proto});
     }
 
     static and(conds: Array<BatchCond>): BatchCond {
-        return new BatchCond({"type": "and", "conds": conds.map(e => e._proto)});
+        return new BatchCond({type: "and", conds: conds.map(e => e._proto)});
     }
 
     static or(conds: Array<BatchCond>): BatchCond {
-        return new BatchCond({"type": "or", "conds": conds.map(e => e._proto)});
+        return new BatchCond({type: "or", conds: conds.map(e => e._proto)});
     }
 }
 

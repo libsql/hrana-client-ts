@@ -2,15 +2,20 @@ import type { fetch, Response } from "@libsql/isomorphic-fetch";
 import { Request, Headers } from "@libsql/isomorphic-fetch";
 
 import { ClientError, HttpServerError, ProtoError, ClosedError } from "../errors.js";
+import { readJsonObject, writeJsonObject } from "../encoding/index.js";
 import { IdAlloc } from "../id_alloc.js";
 import { queueMicrotask } from "../ponyfill.js";
 import { errorFromProto } from "../result.js";
 import type { SqlOwner, SqlState, ProtoSql } from "../sql.js";
 import { Sql } from "../sql.js";
 import { Stream } from "../stream.js";
+import { impossible } from "../util.js";
 
 import type { HttpClient } from "./client.js";
 import type * as proto from "./proto.js";
+
+import { PipelineRequestBody as json_PipelineRequestBody } from "./json_encode.js";
+import { PipelineResponseBody as json_PipelineResponseBody } from "./json_decode.js";
 
 type PipelineEntry = {
     request: proto.StreamRequest;
@@ -21,18 +26,18 @@ type PipelineEntry = {
 export class HttpStream extends Stream implements SqlOwner {
     #client: HttpClient;
     #baseUrl: string;
-    #jwt: string | null;
+    #jwt: string | undefined;
     #fetch: typeof fetch;
 
     #closed: Error | undefined;
-    #baton: string | null;
+    #baton: string | undefined;
     #pipeline: Array<PipelineEntry>;
     #pipelineInProgress: boolean;
 
     #sqlIdAlloc: IdAlloc;
 
     /** @private */
-    constructor(client: HttpClient, baseUrl: URL, jwt: string | null, customFetch: typeof fetch) {
+    constructor(client: HttpClient, baseUrl: URL, jwt: string | undefined, customFetch: typeof fetch) {
         super(client.intMode);
         this.#client = client;
         this.#baseUrl = baseUrl.toString();
@@ -40,14 +45,14 @@ export class HttpStream extends Stream implements SqlOwner {
         this.#fetch = customFetch;
 
         this.#closed = undefined;
-        this.#baton = null;
+        this.#baton = undefined;
         this.#pipeline = [];
         this.#pipelineInProgress = false;
 
         this.#sqlIdAlloc = new IdAlloc();
     }
 
-    /** @private*/
+    /** @private */
     override _sqlOwner(): SqlOwner {
         return this;
     }
@@ -60,11 +65,7 @@ export class HttpStream extends Stream implements SqlOwner {
             closed: undefined,
         };
 
-        this.#sendStreamRequest({
-            "type": "store_sql",
-            "sql_id": sqlId,
-            "sql": sql,
-        }).then(
+        this.#sendStreamRequest({type: "store_sql", sqlId, sql}).then(
             () => undefined,
             (error) => this.#setClosed(error),
         );
@@ -79,10 +80,7 @@ export class HttpStream extends Stream implements SqlOwner {
         }
         sqlState.closed = error;
 
-        this.#sendStreamRequest({
-            "type": "close_sql",
-            "sql_id": sqlState.sqlId,
-        }).then(
+        this.#sendStreamRequest({type: "close_sql", sqlId: sqlState.sqlId}).then(
             () => this.#sqlIdAlloc.free(sqlState.sqlId),
             (error) => this.#setClosed(error),
         );
@@ -90,41 +88,35 @@ export class HttpStream extends Stream implements SqlOwner {
 
     /** @private */
     override _execute(stmt: proto.Stmt): Promise<proto.StmtResult> {
-        return this.#sendStreamRequest({
-            "type": "execute",
-            "stmt": stmt,
-        }).then((response) => {
-            return (response as proto.ExecuteStreamResp)["result"];
+        return this.#sendStreamRequest({type: "execute", stmt}).then((response) => {
+            return (response as proto.ExecuteStreamResp).result;
         });
     }
 
     /** @private */
     override _batch(batch: proto.Batch): Promise<proto.BatchResult> {
-        return this.#sendStreamRequest({
-            "type": "batch",
-            "batch": batch,
-        }).then((response) => {
-            return (response as proto.BatchStreamResp)["result"];
+        return this.#sendStreamRequest({type: "batch", batch}).then((response) => {
+            return (response as proto.BatchStreamResp).result;
         });
     }
 
     /** @private */
     override _describe(protoSql: ProtoSql): Promise<proto.DescribeResult> {
         return this.#sendStreamRequest({
-            "type": "describe",
-            "sql": protoSql.sql,
-            "sql_id": protoSql.sqlId,
+            type: "describe",
+            sql: protoSql.sql,
+            sqlId: protoSql.sqlId
         }).then((response) => {
-            return (response as proto.DescribeStreamResp)["result"];
+            return (response as proto.DescribeStreamResp).result;
         });
     }
 
     /** @private */
     override _sequence(protoSql: ProtoSql): Promise<void> {
         return this.#sendStreamRequest({
-            "type": "sequence",
-            "sql": protoSql.sql,
-            "sql_id": protoSql.sqlId,
+            type: "sequence",
+            sql: protoSql.sql,
+            sqlId: protoSql.sqlId,
         }).then((_response) => {
             return undefined;
         });
@@ -152,9 +144,9 @@ export class HttpStream extends Stream implements SqlOwner {
         this.#closed = error;
         this.#client._streamClosed(this);
 
-        if (this.#baton !== null || this.#pipeline.length !== 0 || this.#pipelineInProgress) {
+        if (this.#baton !== undefined || this.#pipeline.length !== 0 || this.#pipelineInProgress) {
             this.#pipeline.push({
-                request: {"type": "close"},
+                request: {type: "close"},
                 responseCallback() {},
                 errorCallback() {},
             });
@@ -199,9 +191,9 @@ export class HttpStream extends Stream implements SqlOwner {
             }
             return resp.json();
         }).then((respJson) => {
-            const respBody = respJson as proto.PipelineResponseBody;
-            this.#baton = respBody["baton"] ?? null;
-            this.#baseUrl = respBody["base_url"] ?? this.#baseUrl;
+            const respBody = readJsonObject(respJson, json_PipelineResponseBody);
+            this.#baton = respBody.baton;
+            this.#baseUrl = respBody.baseUrl ?? this.#baseUrl;
             handlePipelineResponse(pipeline, respBody);
         }).catch((error) => {
             this.#setClosed(error);
@@ -217,40 +209,45 @@ export class HttpStream extends Stream implements SqlOwner {
     #createPipelineRequest(pipeline: Array<PipelineEntry>): Request {
         const url = new URL("v2/pipeline", this.#baseUrl);
         const requestBody: proto.PipelineRequestBody = {
-            "baton": this.#baton,
-            "requests": pipeline.map((entry) => entry.request),
+            baton: this.#baton,
+            requests: pipeline.map((entry) => entry.request),
         };
+        const jsonBody = writeJsonObject(requestBody, json_PipelineRequestBody);
+
         const headers = new Headers();
-        if (this.#jwt !== null) {
+        headers.set("content-type", "application/json");
+        if (this.#jwt !== undefined) {
             headers.set("authorization", `Bearer ${this.#jwt}`);
         }
 
         return new Request(url, {
             method: "POST",
             headers,
-            body: JSON.stringify(requestBody),
+            body: jsonBody,
         });
     }
 }
 
 function handlePipelineResponse(pipeline: Array<PipelineEntry>, respBody: proto.PipelineResponseBody): void {
-    if (respBody["results"].length !== pipeline.length) {
+    if (respBody.results.length !== pipeline.length) {
         throw new ProtoError("Server returned unexpected number of pipeline results");
     }
 
     for (let i = 0; i < pipeline.length; ++i) {
-        const result = respBody["results"][i];
+        const result = respBody.results[i];
         const entry = pipeline[i];
 
-        if (result["type"] === "ok") {
-            if (result["response"]["type"] !== entry.request["type"]) {
+        if (result.type === "ok") {
+            if (result.response.type !== entry.request.type) {
                 throw new ProtoError("Received unexpected type of response");
             }
-            entry.responseCallback(result["response"]);
-        } else if (result["type"] === "error") {
-            entry.errorCallback(errorFromProto(result["error"]));
+            entry.responseCallback(result.response);
+        } else if (result.type === "error") {
+            entry.errorCallback(errorFromProto(result.error));
+        } else if (result.type === "none") {
+            throw new ProtoError("Received unrecognized StreamResult");
         } else {
-            throw new ProtoError("Received unexpected type of result");
+            throw impossible(result, "Received impossible type of StreamResult");
         }
     }
 }

@@ -1,4 +1,4 @@
-import type * as proto from "./proto.js";
+import type * as proto from "./shared/proto.js";
 
 /** Generic error produced by the Hrana client. */
 export class ClientError extends Error {
@@ -28,7 +28,7 @@ export class ResponseError extends ClientError {
     constructor(message: string, protoError: proto.Error) {
         super(message);
         this.name = "ResponseError";
-        this.code = protoError["code"] ?? undefined;
+        this.code = protoError.code;
         this.proto = protoError;
         this.stack = undefined;
     }

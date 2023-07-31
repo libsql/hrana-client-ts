@@ -9,13 +9,13 @@ import { HttpStream } from "./stream.js";
 /** A client for the Hrana protocol over HTTP. */
 export class HttpClient extends Client {
     #url: URL;
-    #jwt: string | null;
+    #jwt: string | undefined;
     #fetch: typeof fetch;
     #closed: boolean;
     #streams: Set<HttpStream>;
 
     /** @private */
-    constructor(url: URL, jwt: string | null, customFetch: unknown | undefined) {
+    constructor(url: URL, jwt: string | undefined, customFetch: unknown | undefined) {
         super();
         this.#url = url;
         this.#jwt = jwt;
