@@ -1,4 +1,5 @@
 import { Batch } from "./batch.js";
+import type { Client } from "./client.js";
 import type { DescribeResult } from "./describe.js";
 import { describeResultFromProto } from "./describe.js";
 import type { RowsResult, RowResult, ValueResult, StmtResult } from "./result.js";
@@ -19,6 +20,9 @@ export abstract class Stream {
     constructor(intMode: IntMode) {
         this.intMode = intMode;
     }
+
+    /** Get the client object that this stream belongs to. */
+    abstract client(): Client;
 
     /** @private */
     abstract _sqlOwner(): SqlOwner;

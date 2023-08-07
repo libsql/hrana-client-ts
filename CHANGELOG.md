@@ -4,7 +4,10 @@
 
 - **Added support for Hrana 3**, which included some API changes:
     - Added variant `3` to the `ProtocolVersion` type
+    - Added `BatchCond.isAutocommit()`
 - Changed type of `StmtResult.lastInsertRowid` to bigint
+- Changed `BatchCond.and()` and `BatchCond.or()` to pass the `Batch` object
+- Added `Stream.client()`
 
 ## 0.4.3 -- 2023-07-18
 

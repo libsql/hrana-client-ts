@@ -2,7 +2,7 @@ import { fetch } from "@libsql/isomorphic-fetch";
 
 import type { ProtocolVersion } from "../client.js";
 import { Client } from "../client.js";
-import { ClosedError } from "../errors.js";
+import { ClosedError, ProtocolVersionError } from "../errors.js";
 
 import { HttpStream } from "./stream.js";
 
@@ -27,6 +27,17 @@ export class HttpClient extends Client {
     /** Get the protocol version supported by the server. */
     override getVersion(): Promise<ProtocolVersion> {
         return Promise.resolve(2);
+    }
+
+    // Make sure that the negotiated version is at least `minVersion`.
+    /** @private */
+    override _ensureVersion(minVersion: ProtocolVersion, feature: string): void {
+        if (minVersion > 2) {
+            throw new ProtocolVersionError(
+                `${feature} is supported only on protocol version ${minVersion} and higher, ` +
+                    "but the HTTP client only supports version 2.",
+            );
+        }
     }
 
     /** Open a {@link HttpStream}, a stream for executing SQL statements. */

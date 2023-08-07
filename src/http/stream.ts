@@ -52,6 +52,11 @@ export class HttpStream extends Stream implements SqlOwner {
         this.#sqlIdAlloc = new IdAlloc();
     }
 
+    /** Get the {@link HttpClient} object that this stream belongs to. */
+    override client(): HttpClient {
+        return this.#client;
+    }
+
     /** @private */
     override _sqlOwner(): SqlOwner {
         return this;

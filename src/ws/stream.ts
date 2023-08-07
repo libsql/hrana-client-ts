@@ -21,6 +21,11 @@ export class WsStream extends Stream {
         this.#state = state;
     }
 
+    /** Get the {@link WsClient} object that this stream belongs to. */
+    override client(): WsClient {
+        return this.#client;
+    }
+
     /** @private */
     override _sqlOwner(): SqlOwner {
         return this.#client;

@@ -14,6 +14,10 @@ export abstract class Client {
     /** Get the protocol version negotiated with the server. */
     abstract getVersion(): Promise<ProtocolVersion>;
 
+    // Make sure that the negotiated version is at least `minVersion`.
+    /** @private */
+    abstract _ensureVersion(minVersion: ProtocolVersion, feature: string): void;
+
     /** Open a {@link Stream}, a stream for executing SQL statements. */
     abstract openStream(): Stream;
 

@@ -155,7 +155,7 @@ export class WsClient extends Client implements SqlOwner {
 
     // Make sure that the negotiated version is at least `minVersion`.
     /** @private */
-    _ensureVersion(minVersion: ProtocolVersion, feature: string): void {
+    override _ensureVersion(minVersion: ProtocolVersion, feature: string): void {
         if (this.#subprotocol === undefined || !this.#getVersionCalled) {
             throw new ProtocolVersionError(
                 `${feature} is supported only on protocol version ${minVersion} and higher, ` +

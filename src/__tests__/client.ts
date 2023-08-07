@@ -561,7 +561,7 @@ describe("batches", () => {
 
     const andOr: Array<{
         testName: string,
-        condFun: (_: Array<hrana.BatchCond>) => hrana.BatchCond,
+        condFun: (batch: hrana.Batch, conds: Array<hrana.BatchCond>) => hrana.BatchCond,
         expectedKey: "andOutput" | "orOutput",
     }> = [
         {testName: "and condition", condFun: hrana.BatchCond.and, expectedKey: "andOutput"},
@@ -579,7 +579,7 @@ describe("batches", () => {
                     return step;
                 });
 
-                const testedCond = condFun(steps.map(hrana.BatchCond.ok));
+                const testedCond = condFun(batch, steps.map(hrana.BatchCond.ok));
                 const prom = batch.step()
                     .condition(testedCond)
                     .queryValue("SELECT 'yes'");
@@ -589,6 +589,54 @@ describe("batches", () => {
             }
         }));
     }
+
+    (version >= 3 ? describe : describe.skip)("isAutocommit condition", () => {
+        test("in autocommit mode", withClient(async (c) => {
+            await c.getVersion();
+            const s = c.openStream();
+            const batch = s.batch();
+
+            const prom = batch.step()
+                .condition(hrana.BatchCond.isAutocommit(batch))
+                .queryValue("SELECT 42");
+            await batch.execute();
+
+            expect((await prom)!.value).toStrictEqual(42);
+        }));
+
+        test("in transaction", withClient(async (c) => {
+            await c.getVersion();
+            const s = c.openStream();
+            const batch = s.batch();
+
+            batch.step().run("BEGIN");
+            const prom = batch.step()
+                .condition(hrana.BatchCond.isAutocommit(batch))
+                .queryValue("SELECT 42");
+            await batch.execute();
+
+            expect(await prom).toBeUndefined();
+        }));
+
+        test("after implicit rollback", withClient(async (c) => {
+            await c.getVersion();
+            const s = c.openStream();
+            s.run("DROP TABLE IF EXISTS t");
+            s.run("CREATE TABLE t (a UNIQUE)");
+            s.run("INSERT INTO t VALUES (1)");
+
+            const batch = s.batch();
+            const prom1 = batch.step()
+                .run("INSERT OR ROLLBACK INTO t VALUES (1)");
+            const prom2 = batch.step()
+                .condition(hrana.BatchCond.not(hrana.BatchCond.isAutocommit(batch)))
+                .queryValue("SELECT 42");
+            await batch.execute();
+
+            await expect(prom1).rejects.toBeInstanceOf(hrana.ClientError);
+            expect(await prom2).toBeUndefined();
+        }));
+    });
 });
 
 (version >= 2 ? describe : describe.skip)("describe()", () => {
