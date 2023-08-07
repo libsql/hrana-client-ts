@@ -2,7 +2,9 @@ import type { fetch, Response } from "@libsql/isomorphic-fetch";
 import { Request, Headers } from "@libsql/isomorphic-fetch";
 
 import { ClientError, HttpServerError, ProtoError, ClosedError } from "../errors.js";
-import { readJsonObject, writeJsonObject } from "../encoding/index.js";
+import {
+    readJsonObject, writeJsonObject, readProtobufMessage, writeProtobufMessage,
+} from "../encoding/index.js";
 import { IdAlloc } from "../id_alloc.js";
 import { queueMicrotask } from "../ponyfill.js";
 import { errorFromProto } from "../result.js";
@@ -11,11 +13,13 @@ import { Sql } from "../sql.js";
 import { Stream } from "../stream.js";
 import { impossible } from "../util.js";
 
-import type { HttpClient } from "./client.js";
+import type { HttpClient, Endpoint } from "./client.js";
 import type * as proto from "./proto.js";
 
 import { PipelineRequestBody as json_PipelineRequestBody } from "./json_encode.js";
+import { PipelineRequestBody as protobuf_PipelineRequestBody } from "./protobuf_encode.js";
 import { PipelineResponseBody as json_PipelineResponseBody } from "./json_decode.js";
+import { PipelineResponseBody as protobuf_PipelineResponseBody } from "./protobuf_decode.js";
 
 type PipelineEntry = {
     request: proto.StreamRequest;
@@ -187,10 +191,11 @@ export class HttpStream extends Stream implements SqlOwner {
         }
 
         const pipeline = Array.from(this.#pipeline);
+        const endpoint = this.#client._endpoint;
 
         let promise;
         try {
-            const request = this.#createPipelineRequest(pipeline);
+            const request = this.#createPipelineRequest(pipeline, endpoint);
             const fetch = this.#fetch;
             promise = fetch(request);
         } catch (error) {
@@ -200,15 +205,14 @@ export class HttpStream extends Stream implements SqlOwner {
         this.#pipelineInProgress = true;
         this.#pipeline.length = 0;
 
-        promise.then((resp: Response) => {
+        promise.then((resp: Response): Promise<proto.PipelineResponseBody> => {
             if (!resp.ok) {
                 return errorFromResponse(resp).then((error) => {
                     throw error;
                 });
             }
-            return resp.json();
-        }).then((respJson) => {
-            const respBody = readJsonObject(respJson, json_PipelineResponseBody);
+            return decodePipelineResponse(resp, endpoint);
+        }).then((respBody) => {
             this.#baton = respBody.baton;
             this.#baseUrl = respBody.baseUrl ?? this.#baseUrl;
             handlePipelineResponse(pipeline, respBody);
@@ -223,25 +227,22 @@ export class HttpStream extends Stream implements SqlOwner {
         });
     }
 
-    #createPipelineRequest(pipeline: Array<PipelineEntry>): Request {
-        const url = new URL("v2/pipeline", this.#baseUrl);
+    #createPipelineRequest(pipeline: Array<PipelineEntry>, endpoint: Endpoint): Request {
+        const url = new URL(endpoint.pipelinePath, this.#baseUrl);
         const requestBody: proto.PipelineRequestBody = {
             baton: this.#baton,
             requests: pipeline.map((entry) => entry.request),
         };
+        const [body, contentType] = encodePipelineRequest(requestBody, endpoint);
         const jsonBody = writeJsonObject(requestBody, json_PipelineRequestBody);
 
         const headers = new Headers();
-        headers.set("content-type", "application/json");
+        headers.set("content-type", contentType);
         if (this.#jwt !== undefined) {
             headers.set("authorization", `Bearer ${this.#jwt}`);
         }
 
-        return new Request(url, {
-            method: "POST",
-            headers,
-            body: jsonBody,
-        });
+        return new Request(url, {method: "POST", headers, body});
     }
 }
 
@@ -266,6 +267,36 @@ function handlePipelineResponse(pipeline: Array<PipelineEntry>, respBody: proto.
         } else {
             throw impossible(result, "Received impossible type of StreamResult");
         }
+    }
+}
+
+async function decodePipelineResponse(
+    resp: Response,
+    endpoint: Endpoint,
+): Promise<proto.PipelineResponseBody> {
+    if (endpoint.encoding === "json") {
+        const respJson = await resp.json();
+        return readJsonObject(respJson, json_PipelineResponseBody);
+    } else if (endpoint.encoding === "protobuf") {
+        const respData = await resp.arrayBuffer();
+        return readProtobufMessage(new Uint8Array(respData), protobuf_PipelineResponseBody);
+    } else {
+        throw impossible(endpoint.encoding, "Impossible encoding");
+    }
+}
+
+function encodePipelineRequest(
+    body: proto.PipelineRequestBody,
+    endpoint: Endpoint,
+): [string | Uint8Array, string] {
+    if (endpoint.encoding === "json") {
+        const data = writeJsonObject(body, json_PipelineRequestBody);
+        return [data, "application/json"];
+    } else if (endpoint.encoding === "protobuf") {
+        const data = writeProtobufMessage(body, protobuf_PipelineRequestBody);
+        return [data, "application/x-protobuf"];
+    } else {
+        throw impossible(endpoint.encoding, "Impossible encoding");
     }
 }
 

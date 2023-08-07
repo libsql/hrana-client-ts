@@ -1,6 +1,5 @@
 import * as d from "../encoding/protobuf/decode.js";
 import { Error, StmtResult, BatchResult, CursorEntry, DescribeResult } from "../shared/protobuf_decode.js";
-
 import * as proto from "./proto.js";
 
 export const ServerMsg: d.MessageDef<proto.ServerMsg> = {

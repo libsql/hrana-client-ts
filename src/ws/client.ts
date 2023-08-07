@@ -159,13 +159,13 @@ export class WsClient extends Client implements SqlOwner {
         if (this.#subprotocol === undefined || !this.#getVersionCalled) {
             throw new ProtocolVersionError(
                 `${feature} is supported only on protocol version ${minVersion} and higher, ` +
-                    "but the version supported by the server is not yet known. Use WsClient.getVersion() " +
-                    "to wait until the version is available.",
+                    "but the version supported by the WebSocket server is not yet known. " +
+                    "Use Client.getVersion() to wait until the version is available.",
             );
         } else if (this.#subprotocol.version < minVersion) {
             throw new ProtocolVersionError(
                 `${feature} is supported on protocol version ${minVersion} and higher, ` +
-                    `but the server only supports version ${this.#subprotocol.version}`
+                    `but the WebSocket server only supports version ${this.#subprotocol.version}`
             );
         }
     }

@@ -44,6 +44,7 @@ export type StreamRequest =
     | GetAutocommitStreamReq
 
 export type StreamResponse =
+    | { type: "none" }
     | CloseStreamResp
     | ExecuteStreamResp
     | BatchStreamResp

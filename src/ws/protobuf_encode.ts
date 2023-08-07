@@ -1,7 +1,6 @@
 import * as e from "../encoding/protobuf/encode.js";
 import { Stmt, Batch } from "../shared/protobuf_encode.js";
 import { impossible } from "../util.js";
-
 import * as proto from "./proto.js";
 
 export function ClientMsg(w: e.MessageWriter, msg: proto.ClientMsg): void {
