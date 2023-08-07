@@ -127,6 +127,18 @@ export class HttpStream extends Stream implements SqlOwner {
         });
     }
 
+    /** Check whether the SQL connection underlying this stream is in autocommit state (i.e., outside of an
+     * explicit transaction). This requires protocol version 3 or higher.
+     */
+    override getAutocommit(): Promise<boolean> {
+        this.#client._ensureVersion(3, "getAutocommit()");
+        return this.#sendStreamRequest({
+            type: "get_autocommit",
+        }).then((response) => {
+            return (response as proto.GetAutocommitStreamResp).isAutocommit;
+        });
+    }
+
     /** Close the stream. */
     override close(): void {
         this.#setClosed(new ClientError("Stream was manually closed"));

@@ -27,6 +27,8 @@ function StreamRequest(w: e.ObjectWriter, msg: proto.StreamRequest): void {
         w.string("sql", msg.sql);
     } else if (msg.type === "close_sql") {
         w.number("sql_id", msg.sqlId);
+    } else if (msg.type === "get_autocommit") {
+        // do nothing
     } else {
         throw impossible(msg, "Impossible type of StreamRequest");
     }

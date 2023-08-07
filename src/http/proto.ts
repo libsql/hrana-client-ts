@@ -41,6 +41,7 @@ export type StreamRequest =
     | DescribeStreamReq
     | StoreSqlStreamReq
     | CloseSqlStreamReq
+    | GetAutocommitStreamReq
 
 export type StreamResponse =
     | CloseStreamResp
@@ -50,6 +51,7 @@ export type StreamResponse =
     | DescribeStreamResp
     | StoreSqlStreamResp
     | CloseSqlStreamResp
+    | GetAutocommitStreamResp
 
 // ### Close stream
 
@@ -131,4 +133,15 @@ export type CloseSqlStreamReq = {
 
 export type CloseSqlStreamResp = {
     type: "close_sql",
+}
+
+// ### Get the autocommit state
+
+export type GetAutocommitStreamReq = {
+    type: "get_autocommit",
+}
+
+export type GetAutocommitStreamResp = {
+    type: "get_autocommit",
+    isAutocommit: boolean,
 }

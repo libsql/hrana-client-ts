@@ -43,6 +43,9 @@ function StreamResponse(obj: d.Obj): proto.StreamResponse {
         return {type: "store_sql"};
     } else if (type === "close_sql") {
         return {type: "close_sql"};
+    } else if (type === "get_autocommit") {
+        const isAutocommit = d.boolean(obj["is_autocommit"]);
+        return {type: "get_autocommit", isAutocommit};
     } else {
         throw new ProtoError("Unexpected type of StreamResponse");
     }

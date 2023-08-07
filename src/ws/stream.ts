@@ -38,7 +38,7 @@ export class WsStream extends Stream {
             streamId: this.#state.streamId,
             stmt,
         }).then((response) => {
-            return (response as proto.ExecuteResp)["result"];
+            return (response as proto.ExecuteResp).result;
         });
     }
 
@@ -49,7 +49,7 @@ export class WsStream extends Stream {
             streamId: this.#state.streamId,
             batch,
         }).then((response) => {
-            return (response as proto.BatchResp)["result"];
+            return (response as proto.BatchResp).result;
         });
     }
 
@@ -62,7 +62,7 @@ export class WsStream extends Stream {
             sql: protoSql.sql,
             sqlId: protoSql.sqlId,
         }).then((response) => {
-            return (response as proto.DescribeResp)["result"];
+            return (response as proto.DescribeResp).result;
         });
     }
 
@@ -76,6 +76,19 @@ export class WsStream extends Stream {
             sqlId: protoSql.sqlId,
         }).then((_response) => {
             return undefined;
+        });
+    }
+
+    /** Check whether the SQL connection underlying this stream is in autocommit state (i.e., outside of an
+     * explicit transaction). This requires protocol version 3 or higher.
+     */
+    override getAutocommit(): Promise<boolean> {
+        this.#client._ensureVersion(3, "getAutocommit()");
+        return this.#sendStreamRequest({
+            type: "get_autocommit",
+            streamId: this.#state.streamId,
+        }).then((response) => {
+            return (response as proto.GetAutocommitResp).isAutocommit;
         });
     }
 

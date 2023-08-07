@@ -621,9 +621,9 @@ describe("batches", () => {
         test("after implicit rollback", withClient(async (c) => {
             await c.getVersion();
             const s = c.openStream();
-            s.run("DROP TABLE IF EXISTS t");
-            s.run("CREATE TABLE t (a UNIQUE)");
-            s.run("INSERT INTO t VALUES (1)");
+            await s.run("DROP TABLE IF EXISTS t");
+            await s.run("CREATE TABLE t (a UNIQUE)");
+            await s.run("INSERT INTO t VALUES (1)");
 
             const batch = s.batch();
             const prom1 = batch.step()
@@ -803,6 +803,26 @@ describe("batches", () => {
 
 test("getVersion()", withClient(async (c) => {
     expect(await c.getVersion()).toBeGreaterThanOrEqual(version);
+}));
+
+(version >= 3 ? test : test.skip)("getAutocommit()", withClient(async (c) => {
+    await c.getVersion();
+    const s = c.openStream();
+    expect(await s.getAutocommit()).toStrictEqual(true);
+
+    await s.run("DROP TABLE IF EXISTS t");
+    await s.run("CREATE TABLE t (a UNIQUE)");
+    expect(await s.getAutocommit()).toStrictEqual(true);
+
+    await s.run("BEGIN");
+    expect(await s.getAutocommit()).toStrictEqual(false);
+
+    await s.run("INSERT INTO t VALUES (1)");
+    expect(await s.getAutocommit()).toStrictEqual(false);
+
+    await expect(s.run("INSERT OR ROLLBACK INTO t VALUES (1)"))
+        .rejects.toBeInstanceOf(hrana.ClientError);
+    expect(await s.getAutocommit()).toStrictEqual(true);
 }));
 
 (isHttp ? describe : describe.skip)("customFetch", () => {

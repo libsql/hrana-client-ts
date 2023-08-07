@@ -82,6 +82,11 @@ export abstract class Stream {
         return this._sequence(protoSql);
     }
 
+    /** Check whether the SQL connection underlying this stream is in autocommit state (i.e., outside of an
+     * explicit transaction). This requires protocol version 3 or higher.
+     */
+    abstract getAutocommit(): Promise<boolean>;
+
     /** Close the stream. */
     abstract close(): void;
 

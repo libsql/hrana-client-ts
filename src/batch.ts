@@ -195,7 +195,7 @@ export class BatchCond {
     }
 
     /** Create a condition that evaluates to true when the SQL connection is in autocommit mode (not inside an
-     * explicit transaction).
+     * explicit transaction). This requires protocol version 3 or higher.
      */
     static isAutocommit(batch: Batch): BatchCond {
         batch._stream.client()._ensureVersion(3, "BatchCond.isAutocommit()");
