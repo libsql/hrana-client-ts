@@ -5,12 +5,16 @@ import { Client } from "../client.js";
 import {
     readJsonObject, writeJsonObject, readProtobufMessage, writeProtobufMessage,
 } from "../encoding/index.js";
-import { ClientError, ProtoError, ClosedError, WebSocketError, ProtocolVersionError } from "../errors.js";
+import {
+    ClientError, ProtoError, ClosedError, WebSocketError, ProtocolVersionError,
+    InternalError, MisuseError,
+} from "../errors.js";
 import { IdAlloc } from "../id_alloc.js";
 import { errorFromProto } from "../result.js";
 import { Sql, SqlOwner, SqlState } from "../sql.js";
 import { impossible } from "../util.js";
 
+import type { CursorState } from "./cursor.js";
 import type * as proto from "./proto.js";
 import type { StreamState } from "./stream.js";
 import { WsStream } from "./stream.js";
@@ -57,6 +61,8 @@ export class WsClient extends Client implements SqlOwner {
     #requestIdAlloc: IdAlloc;
     // An allocator of stream ids.
     #streamIdAlloc: IdAlloc;
+    // An allocator of cursor ids.
+    #cursorIdAlloc: IdAlloc;
     // An allocator of SQL text ids.
     #sqlIdAlloc: IdAlloc;
 
@@ -75,6 +81,7 @@ export class WsClient extends Client implements SqlOwner {
         this.#responseMap = new Map();
         this.#requestIdAlloc = new IdAlloc();
         this.#streamIdAlloc = new IdAlloc();
+        this.#cursorIdAlloc = new IdAlloc();
         this.#sqlIdAlloc = new IdAlloc();
 
         this.#socket.binaryType = "arraybuffer";
@@ -89,7 +96,7 @@ export class WsClient extends Client implements SqlOwner {
     // Send (or enqueue to send) a message to the server.
     #send(msg: proto.ClientMsg): void {
         if (this.#closed !== undefined) {
-            throw new ClientError("Internal error: trying to send a message on a closed client");
+            throw new InternalError("Trying to send a message on a closed client");
         }
 
         if (this.#opened) {
@@ -316,6 +323,7 @@ export class WsClient extends Client implements SqlOwner {
         const streamState = {
             streamId,
             closed: undefined,
+            cursorState: undefined,
         };
 
         const responseCallback = () => undefined;
@@ -333,13 +341,21 @@ export class WsClient extends Client implements SqlOwner {
     // Make sure that the stream is closed.
     /** @private */
     _closeStream(streamState: StreamState, error: Error): void {
-        if (streamState.closed !== undefined || this.#closed !== undefined) {
+        if (streamState.closed ?? this.#closed !== undefined) {
             return;
         }
         streamState.closed = error;
 
+        const cursorState = streamState.cursorState;
+        if (cursorState !== undefined && cursorState.closed === undefined) {
+            cursorState.closed = error;
+        }
+
         const callback = () => {
             this.#streamIdAlloc.free(streamState.streamId);
+            if (cursorState !== undefined) {
+                this.#cursorIdAlloc.free(cursorState.cursorId);
+            }
         };
         const request: proto.CloseStreamReq = {
             type: "close_stream",
@@ -356,6 +372,58 @@ export class WsClient extends Client implements SqlOwner {
             return;
         }
         this._sendRequest(request, callbacks);
+    }
+
+    // Open a cursor for the given stream executing given batch.
+    /** @private */
+    _openCursor(streamState: StreamState, batch: proto.Batch): CursorState {
+        this._ensureVersion(3, "cursor");
+        if (streamState.cursorState !== undefined) {
+            throw new InternalError("Cannot open multiple cursors on the same stream");
+        }
+
+        const cursorId = this.#cursorIdAlloc.alloc();
+        const cursorState = {
+            cursorId,
+            done: false,
+            closed: undefined,
+        };
+
+        const responseCallback = () => undefined;
+        const errorCallback = (e: Error) => this._closeCursor(streamState, cursorState, e);
+
+        const request: proto.OpenCursorReq = {
+            type: "open_cursor",
+            streamId: streamState.streamId,
+            cursorId,
+            batch,
+        };
+        this._sendStreamRequest(streamState, request, {responseCallback, errorCallback});
+
+        streamState.cursorState = cursorState;
+        return cursorState;
+    }
+
+    // Make sure that the cursor is closed.
+    /** @private */
+    _closeCursor(streamState: StreamState, cursorState: CursorState, error: Error): void {
+        if (cursorState.closed ?? streamState.closed ?? this.#closed !== undefined) {
+            return;
+        }
+        cursorState.closed = error;
+
+        const callback = () => {
+            this.#cursorIdAlloc.free(cursorState.cursorId);
+        };
+        const request: proto.CloseCursorReq = {
+            type: "close_cursor",
+            cursorId: cursorState.cursorId,
+        };
+        this._sendRequest(request, {responseCallback: callback, errorCallback: callback});
+
+        if (streamState.cursorState === cursorState) {
+            streamState.cursorState = undefined;
+        }
     }
 
     /** Cache a SQL text on the server. This requires protocol version 2 or higher. */

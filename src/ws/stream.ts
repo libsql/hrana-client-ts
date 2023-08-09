@@ -3,11 +3,14 @@ import type { SqlOwner, ProtoSql } from "../sql.js";
 import { Stream } from "../stream.js";
 
 import type { WsClient } from "./client.js";
+import type { CursorState } from "./cursor.js";
+import { WsCursor } from "./cursor.js";
 import type * as proto from "./proto.js";
 
 export interface StreamState {
     streamId: number;
     closed: Error | undefined;
+    cursorState: CursorState | undefined;
 }
 
 export class WsStream extends Stream {
@@ -77,6 +80,12 @@ export class WsStream extends Stream {
         }).then((_response) => {
             return undefined;
         });
+    }
+
+    /** @private */
+    override async _openCursor(batch: proto.Batch): Promise<WsCursor> {
+        const cursorState = this.#client._openCursor(this.#state, batch);
+        return new WsCursor(this.#client, this.#state, cursorState);
     }
 
     /** Check whether the SQL connection underlying this stream is in autocommit state (i.e., outside of an

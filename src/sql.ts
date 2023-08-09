@@ -1,4 +1,4 @@
-import { ClientError, ClosedError } from "./errors.js";
+import { ClientError, ClosedError, MisuseError } from "./errors.js";
 
 /** A SQL text that you can send to the database. Either a string or a reference to SQL text that is cached on
  * the server. */
@@ -31,7 +31,7 @@ export class Sql {
     /** @private */
     _getSqlId(owner: SqlOwner): number {
         if (this.#owner !== owner) {
-            throw new Error("Attempted to use SQL text opened with other object");
+            throw new MisuseError("Attempted to use SQL text opened with other object");
         } else if (this.#state.closed !== undefined) {
             throw new ClosedError("SQL text is closed", this.#state.closed);
         }

@@ -58,8 +58,6 @@ function Value(w: e.MessageWriter, msg: proto.Value): void {
         w.string(4, msg);
     } else if (msg instanceof Uint8Array) {
         w.bytes(5, msg);
-    } else if (msg === undefined) {
-        // do nothing
     } else {
         throw impossible(msg, "Impossible type of Value");
     }

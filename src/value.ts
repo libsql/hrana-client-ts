@@ -1,4 +1,4 @@
-import { ClientError, ProtoError } from "./errors.js";
+import { ClientError, ProtoError, MisuseError } from "./errors.js";
 import type * as proto from "./shared/proto.js";
 import { impossible } from "./util.js";
 
@@ -65,8 +65,6 @@ export function valueToProto(value: InValue): proto.Value {
 const minInteger = -9223372036854775808n;
 const maxInteger = 9223372036854775807n;
 
-export const protoNull: proto.Value = null;
-
 export function valueFromProto(value: proto.Value, intMode: IntMode): Value {
     if (value === null) {
         return null;
@@ -88,7 +86,7 @@ export function valueFromProto(value: proto.Value, intMode: IntMode): Value {
         } else if (intMode === "string") {
             return ""+value;
         } else {
-            throw new Error("Invalid value for IntMode");
+            throw new MisuseError("Invalid value for IntMode");
         }
     } else if (value instanceof Uint8Array) {
         // TODO: we need to copy data from `Uint8Array` to return an `ArrayBuffer`. Perhaps we should add a

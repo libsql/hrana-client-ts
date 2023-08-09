@@ -2,7 +2,7 @@ import type * as proto from "./shared/proto.js";
 import type { InSql, SqlOwner } from "./sql.js";
 import { sqlToProto } from "./sql.js";
 import type { InValue } from "./value.js";
-import { valueToProto, protoNull } from "./value.js";
+import { valueToProto } from "./value.js";
 
 /** A statement that you can send to the database. Statements are represented by the {@link Stmt} class, but
  * as a shorthand, you can specify an SQL text without arguments, or a tuple with the SQL text and positional
@@ -50,7 +50,7 @@ export class Stmt {
         }
 
         while (this._args.length < index) {
-            this._args.push(protoNull);
+            this._args.push(null);
         }
         this._args[index - 1] = valueToProto(value);
 

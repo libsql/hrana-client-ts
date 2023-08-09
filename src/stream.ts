@@ -1,5 +1,6 @@
 import { Batch } from "./batch.js";
 import type { Client } from "./client.js";
+import type { Cursor } from "./cursor.js";
 import type { DescribeResult } from "./describe.js";
 import { describeResultFromProto } from "./describe.js";
 import type { RowsResult, RowResult, ValueResult, StmtResult } from "./result.js";
@@ -34,6 +35,8 @@ export abstract class Stream {
     abstract _describe(protoSql: ProtoSql): Promise<proto.DescribeResult>;
     /** @private */
     abstract _sequence(protoSql: ProtoSql): Promise<void>;
+    /** @private */
+    abstract _openCursor(batch: proto.Batch): Promise<Cursor>;
 
     /** Execute a statement and return rows. */
     query(stmt: InStmt): Promise<RowsResult> {
@@ -64,9 +67,14 @@ export abstract class Stream {
         return this._execute(stmt).then((r) => fromProto(r, this.intMode));
     }
 
-    /** Return a builder for creating and executing a batch. */
-    batch(): Batch {
-        return new Batch(this);
+    /** Return a builder for creating and executing a batch.
+     *
+     * If `useCursor` is true, the batch will be executed using a Hrana cursor, which will stream results from
+     * the server to the client, which consumes less memory on the server. This requires protocol version 3 or
+     * higher.
+     */
+    batch(useCursor: boolean = false): Batch {
+        return new Batch(this, useCursor);
     }
 
     /** Parse and analyze a statement. This requires protocol version 2 or higher. */

@@ -6,9 +6,11 @@
     - Added variant `3` to the `ProtocolVersion` type
     - Added `BatchCond.isAutocommit()`
     - Added `Stream.getAutocommit()`
+    - Added parameter `useCursor` to `Stream.batch()`
 - Changed type of `StmtResult.lastInsertRowid` to bigint
 - Changed `BatchCond.and()` and `BatchCond.or()` to pass the `Batch` object
 - Added `Stream.client()`
+- Added `MisuseError` and `InternalError`
 
 ## 0.4.3 -- 2023-07-18
 

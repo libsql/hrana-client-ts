@@ -1,7 +1,8 @@
 import type { fetch, Response } from "@libsql/isomorphic-fetch";
 import { Request, Headers } from "@libsql/isomorphic-fetch";
 
-import { ClientError, HttpServerError, ProtoError, ClosedError } from "../errors.js";
+import type { Cursor } from "../cursor.js";
+import { ClientError, HttpServerError, ProtoError, ClosedError, InternalError } from "../errors.js";
 import {
     readJsonObject, writeJsonObject, readProtobufMessage, writeProtobufMessage,
 } from "../encoding/index.js";
@@ -129,6 +130,11 @@ export class HttpStream extends Stream implements SqlOwner {
         }).then((_response) => {
             return undefined;
         });
+    }
+
+    /** @private */
+    override _openCursor(batch: proto.Batch): Promise<Cursor> {
+        throw new InternalError("HTTP cursors not yet implemented");
     }
 
     /** Check whether the SQL connection underlying this stream is in autocommit state (i.e., outside of an

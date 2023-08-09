@@ -95,3 +95,21 @@ export class ProtocolVersionError extends ClientError {
         this.name = "ProtocolVersionError";
     }
 }
+
+/** Error thrown when an internal client error happens. */
+export class InternalError extends ClientError {
+    /** @private */
+    constructor(message: string) {
+        super(message);
+        this.name = "InternalError";
+    }
+}
+
+/** Error thrown when the API is misused. */
+export class MisuseError extends ClientError {
+    /** @private */
+    constructor(message: string) {
+        super(message);
+        this.name = "MisuseError";
+    }
+}

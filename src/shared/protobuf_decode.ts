@@ -1,4 +1,5 @@
 import * as d from "../encoding/protobuf/decode.js";
+import { ProtoError } from "../errors.js";
 
 import * as proto from "./proto.js";
 
@@ -33,7 +34,13 @@ const Col: d.MessageDef<proto.Col> = {
 
 const Row: d.MessageDef<Array<proto.Value>> = {
     default() { return [] },
-    1 (r, msg) { msg.push(r.message(Value)) },
+    1 (r, msg) { 
+        const value = r.message(Value);
+        if (value === undefined) {
+            throw new ProtoError("Unrecognized type of Value");
+        }
+        msg.push(value);
+    },
 };
 
 
@@ -133,7 +140,7 @@ const DescribeCol: d.MessageDef<proto.DescribeCol> = {
 
 
 
-const Value: d.MessageDef<proto.Value> = {
+const Value: d.MessageDef<proto.Value | undefined> = {
     default() { return undefined },
     1 (r) { return null },
     2 (r) { return r.sint64() },

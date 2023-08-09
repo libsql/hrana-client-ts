@@ -1,4 +1,4 @@
-import { ProtoError } from "./errors.js";
+import { ProtoError, MisuseError } from "./errors.js";
 import { IdAlloc } from "./id_alloc.js";
 import type { RowsResult, RowResult, ValueResult, StmtResult } from "./result.js";
 import {
@@ -10,6 +10,7 @@ import type * as proto from "./shared/proto.js";
 import type { InStmt } from "./stmt.js";
 import { stmtToProto } from "./stmt.js";
 import { Stream } from "./stream.js";
+import { impossible } from "./util.js";
 import type { Value, InValue, IntMode } from "./value.js";
 import { valueToProto, valueFromProto } from "./value.js";
 
@@ -17,20 +18,17 @@ import { valueToProto, valueFromProto } from "./value.js";
 export class Batch {
     /** @private */
     _stream: Stream;
-
+    #useCursor: boolean;
+    /** @private */
+    _steps: Array<BatchStepState>;
     #executed: boolean;
-    /** @private */
-    _steps: Array<proto.BatchStep>;
-    /** @private */
-    _resultCallbacks: Array<(_: proto.BatchResult) => void>;
 
     /** @private */
-    constructor(stream: Stream) {
+    constructor(stream: Stream, useCursor: boolean) {
         this._stream = stream;
-        this.#executed = false;
-
+        this.#useCursor = useCursor;
         this._steps = [];
-        this._resultCallbacks = [];
+        this.#executed = false;
     }
 
     /** Return a builder for adding a step to the batch. */
@@ -41,18 +39,124 @@ export class Batch {
     /** Execute the batch. */
     execute(): Promise<void> {
         if (this.#executed) {
-            throw new Error("This batch has already been executed");
+            throw new MisuseError("This batch has already been executed");
         }
         this.#executed = true;
 
         const batch: proto.Batch = {
-            steps: this._steps,
+            steps: this._steps.map((step) => step.proto),
         };
-        return this._stream._batch(batch).then((result) => {
-            for (const callback of this._resultCallbacks) {
-                callback(result);
+
+        if (this.#useCursor) {
+            return executeCursor(this._stream, this._steps, batch);
+        } else {
+            return executeRegular(this._stream, this._steps, batch);
+        }
+    }
+}
+
+interface BatchStepState {
+    proto: proto.BatchStep;
+    callback(stepResult: proto.StmtResult | undefined, stepError: proto.Error | undefined): void;
+}
+
+function executeRegular(
+    stream: Stream,
+    steps: Array<BatchStepState>,
+    batch: proto.Batch,
+): Promise<void> {
+    return stream._batch(batch).then((result) => {
+        for (let step = 0; step < steps.length; ++step) {
+            const stepResult = result.stepResults.get(step);
+            const stepError = result.stepErrors.get(step);
+            steps[step].callback(stepResult, stepError);
+        }
+    });
+}
+
+async function executeCursor(
+    stream: Stream,
+    steps: Array<BatchStepState>,
+    batch: proto.Batch,
+): Promise<void> {
+    const cursor = await stream._openCursor(batch);
+    try {
+        let nextStep = 0;
+        let beginEntry: proto.StepBeginEntry | undefined = undefined;
+        let rows: Array<Array<proto.Value>> = [];
+
+        for (;;) {
+            const entry = await cursor.next();
+            if (entry === undefined) {
+                break;
             }
-        });
+
+            if (entry.type === "step_begin") {
+                if (entry.step < nextStep || entry.step >= steps.length) {
+                    throw new ProtoError("Server produced StepBeginEntry for unexpected step");
+                } else if (beginEntry !== undefined) {
+                    throw new ProtoError("Server produced StepBeginEntry before terminating previous step");
+                }
+
+                for (let step = nextStep; step < entry.step; ++step) {
+                    steps[step].callback(undefined, undefined);
+                }
+                nextStep = entry.step + 1;
+                beginEntry = entry;
+                rows = [];
+            } else if (entry.type === "step_end") {
+                if (beginEntry === undefined) {
+                    throw new ProtoError("Server produced StepEndEntry but no step is active");
+                }
+
+                const stmtResult = {
+                    cols: beginEntry.cols,
+                    rows,
+                    affectedRowCount: entry.affectedRowCount,
+                    lastInsertRowid: entry.lastInsertRowid,
+                };
+                steps[beginEntry.step].callback(stmtResult, undefined);
+                beginEntry = undefined;
+                rows = [];
+            } else if (entry.type === "step_error") {
+                if (beginEntry === undefined) {
+                    if (entry.step >= steps.length) {
+                        throw new ProtoError("Server produced StepErrorEntry for unexpected step");
+                    }
+                    for (let step = nextStep; step < entry.step; ++step) {
+                        steps[step].callback(undefined, undefined);
+                    }
+                } else {
+                    if (entry.step !== beginEntry.step) {
+                        throw new ProtoError("Server produced StepErrorEntry for unexpected step");
+                    }
+                    beginEntry = undefined;
+                    rows = [];
+                }
+                steps[entry.step].callback(undefined, entry.error);
+                nextStep = entry.step + 1;
+            } else if (entry.type === "row") {
+                if (beginEntry === undefined) {
+                    throw new ProtoError("Server produced RowEntry but no step is active");
+                }
+                rows.push(entry.row);
+            } else if (entry.type === "error") {
+                throw errorFromProto(entry.error);
+            } else if (entry.type === "none") {
+                throw new ProtoError("Server produced unrecognized CursorEntry");
+            } else {
+                throw impossible(entry, "Impossible CursorEntry");
+            }
+        }
+
+        if (beginEntry !== undefined) {
+            throw new ProtoError("Server closed Cursor before terminating active step");
+        }
+        for (let step = nextStep; step < steps.length; ++step) {
+            steps[step].callback(undefined, undefined);
+        }
+    } finally {
+        cursor.close();
     }
 }
 
@@ -72,7 +176,7 @@ export class BatchStep {
     }
 
     /** Add the condition that needs to be satisfied to execute the statement. If you use this method multiple
-    * times, we join the conditions with a logical AND. */
+     * times, we join the conditions with a logical AND. */
     condition(cond: BatchCond): this {
         this.#conds.push(cond._proto);
         return this;
@@ -103,13 +207,11 @@ export class BatchStep {
         wantRows: boolean,
         fromProto: (result: proto.StmtResult, intMode: IntMode) => T,
     ): Promise<T | undefined> {
-        const stmt = stmtToProto(this._batch._stream._sqlOwner(), inStmt, wantRows);
-
         if (this._index !== undefined) {
-            throw new Error("This step has already been added to the batch");
+            throw new MisuseError("This BatchStep has already been added to the batch");
         }
-        const index = this._batch._steps.length;
-        this._index = index;
+
+        const stmt = stmtToProto(this._batch._stream._sqlOwner(), inStmt, wantRows);
 
         let condition: proto.BatchCond | undefined;
         if (this.#conds.length === 0) {
@@ -117,15 +219,16 @@ export class BatchStep {
         } else if (this.#conds.length === 1) {
             condition = this.#conds[0];
         } else {
-            condition = {type: "and", conds: this.#conds};
+            condition = {type: "and", conds: this.#conds.slice()};
         }
 
-        this._batch._steps.push({stmt, condition});
+        const proto: proto.BatchStep = {stmt, condition};
 
         return new Promise((outputCallback, errorCallback) => {
-            this._batch._resultCallbacks.push((result) => {
-                const stepResult = result.stepResults.get(index);
-                const stepError = result.stepErrors.get(index);
+            const callback = (
+                stepResult: proto.StmtResult | undefined,
+                stepError: proto.Error | undefined,
+            ): void => {
                 if (stepResult !== undefined && stepError !== undefined) {
                     errorCallback(new ProtoError("Server returned both result and error"));
                 } else if (stepError !== undefined) {
@@ -135,7 +238,10 @@ export class BatchStep {
                 } else {
                     outputCallback(undefined);
                 }
-            });
+            };
+
+            this._index = this._batch._steps.length;
+            this._batch._steps.push({proto, callback});
         });
     }
 }
@@ -205,13 +311,13 @@ export class BatchCond {
 
 function stepIndex(step: BatchStep): number {
     if (step._index === undefined) {
-        throw new Error("Cannot add a condition referencing a step that has not been added to the batch");
+        throw new MisuseError("Cannot add a condition referencing a step that has not been added to the batch");
     }
     return step._index;
 }
 
 function checkCondBatch(expectedBatch: Batch, cond: BatchCond): void {
     if (cond._batch !== expectedBatch) {
-        throw new Error("Cannot mix BatchCond objects for different Batch objects");
+        throw new MisuseError("Cannot mix BatchCond objects for different Batch objects");
     }
 }

@@ -123,7 +123,6 @@ export type DescribeCol = {
 // object with `type` property, because there might be a lot of `Value`
 // instances and we don't want to create an unnecessary object for each one
 export type Value =
-    | undefined
     | null
     | bigint
     | number
