@@ -512,11 +512,21 @@ for (const useCursor of [false, true]) {
             const prom1 = batch.step().queryValue("SELECT 1");
             const prom2 = batch.step().queryValue("SELECT foobar");
             const prom3 = batch.step().queryValue("SELECT 2");
+            prom2.catch(() => {}); // silence Node warning
             await batch.execute();
 
             expect((await prom1)!.value).toStrictEqual(1);
             await expect(prom2).rejects.toBeInstanceOf(hrana.ClientError);
             expect((await prom3)!.value).toStrictEqual(2);
+        }));
+
+        test("statement with invalid syntax", withClient(async (c) => {
+            if (useCursor) { await c.getVersion(); }
+            const s = c.openStream();
+
+            const batch = s.batch(useCursor);
+            const prom = batch.step().queryValue("spam");
+            await expect(batch.execute().then(() => prom)).rejects.toBeInstanceOf(hrana.ClientError);
         }));
 
         test("ok condition", withClient(async (c) => {
@@ -527,7 +537,7 @@ for (const useCursor of [false, true]) {
             const stepOk = batch.step();
             stepOk.queryValue("SELECT 1");
             const stepErr = batch.step();
-            stepErr.queryValue("SELECT foobar").catch(_ => undefined);
+            stepErr.queryValue("SELECT foospam").catch(_ => undefined);
 
             const prom1 = batch.step()
                 .condition(hrana.BatchCond.ok(stepOk))
@@ -549,7 +559,7 @@ for (const useCursor of [false, true]) {
             const stepOk = batch.step();
             stepOk.queryValue("SELECT 1");
             const stepErr = batch.step();
-            stepErr.queryValue("SELECT foobar").catch(_ => undefined);
+            stepErr.queryValue("SELECT spameggs").catch(_ => undefined);
 
             const prom1 = batch.step()
                 .condition(hrana.BatchCond.error(stepOk))
@@ -566,8 +576,8 @@ for (const useCursor of [false, true]) {
         const andOrCases = [
             {stmts: [], andOutput: true, orOutput: false},
             {stmts: ["SELECT 1"], andOutput: true, orOutput: true},
-            {stmts: ["SELECT foobar"], andOutput: false, orOutput: false},
-            {stmts: ["SELECT 1", "SELECT foobar"], andOutput: false, orOutput: true},
+            {stmts: ["SELECT barfoo"], andOutput: false, orOutput: false},
+            {stmts: ["SELECT 1", "SELECT foobaz"], andOutput: false, orOutput: true},
         ];
 
         const andOr: Array<{
@@ -640,6 +650,7 @@ for (const useCursor of [false, true]) {
                 const batch = s.batch(useCursor);
                 const prom1 = batch.step()
                     .run("INSERT OR ROLLBACK INTO t VALUES (1)");
+                prom1.catch(() => {}); // silence Node warning
                 const prom2 = batch.step()
                     .condition(hrana.BatchCond.not(hrana.BatchCond.isAutocommit(batch)))
                     .queryValue("SELECT 42");

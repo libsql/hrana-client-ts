@@ -3,7 +3,7 @@ import { Stmt, Batch } from "../shared/json_encode.js";
 import { impossible } from "../util.js";
 import * as proto from "./proto.js";
 
-export function PipelineRequestBody(w: e.ObjectWriter, msg: proto.PipelineRequestBody): void {
+export function PipelineReqBody(w: e.ObjectWriter, msg: proto.PipelineReqBody): void {
     if (msg.baton !== undefined) { w.string("baton", msg.baton); }
     w.arrayObjects("requests", msg.requests, StreamRequest);
 }
@@ -32,4 +32,9 @@ function StreamRequest(w: e.ObjectWriter, msg: proto.StreamRequest): void {
     } else {
         throw impossible(msg, "Impossible type of StreamRequest");
     }
+}
+
+export function CursorReqBody(w: e.ObjectWriter, msg: proto.CursorReqBody): void {
+    if (msg.baton !== undefined) { w.string("baton", msg.baton); }
+    w.object("batch", msg.batch, Batch);
 }

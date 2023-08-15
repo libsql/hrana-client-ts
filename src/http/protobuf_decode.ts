@@ -2,7 +2,7 @@ import * as d from "../encoding/protobuf/decode.js";
 import { Error, StmtResult, BatchResult, CursorEntry, DescribeResult } from "../shared/protobuf_decode.js";
 import * as proto from "./proto.js";
 
-export const PipelineResponseBody: d.MessageDef<proto.PipelineResponseBody> = {
+export const PipelineRespBody: d.MessageDef<proto.PipelineRespBody> = {
     default() { return {baton: undefined, baseUrl: undefined, results: []} },
     1 (r, msg) { msg.baton = r.string() },
     2 (r, msg) { msg.baseUrl = r.string() },
@@ -46,3 +46,10 @@ const GetAutocommitStreamResp: d.MessageDef<proto.GetAutocommitStreamResp> = {
     default() { return {type: "get_autocommit", isAutocommit: false} },
     1 (r, msg) { msg.isAutocommit = r.bool() },
 };
+
+export const CursorRespBody: d.MessageDef<proto.CursorRespBody> = {
+    default() { return {baton: undefined, baseUrl: undefined} },
+    1 (r, msg) { msg.baton = r.string() },
+    2 (r, msg) { msg.baseUrl = r.string() },
+};
+

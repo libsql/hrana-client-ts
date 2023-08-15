@@ -94,7 +94,7 @@ export function valueFromProto(value: proto.Value, intMode: IntMode): Value {
         // `ArrayBuffer` (default, convenient) and `Uint8Array` (zero copy)?
         return value.slice().buffer;
     } else if (value === undefined) {
-        throw new ProtoError("Received unrecognized variant of Value");
+        throw new ProtoError("Received unrecognized type of Value");
     } else {
         throw impossible(value, "Impossible type of Value");
     }

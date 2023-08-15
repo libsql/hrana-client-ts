@@ -3,7 +3,7 @@ import { Stmt, Batch } from "../shared/protobuf_encode.js";
 import { impossible } from "../util.js";
 import * as proto from "./proto.js";
 
-export function PipelineRequestBody(w: e.MessageWriter, msg: proto.PipelineRequestBody): void {
+export function PipelineReqBody(w: e.MessageWriter, msg: proto.PipelineReqBody): void {
     if (msg.baton !== undefined) { w.string(1, msg.baton); }
     for (const req of msg.requests) { w.message(2, req, StreamRequest); }
 }
@@ -61,4 +61,9 @@ function CloseSqlStreamReq(w: e.MessageWriter, msg: proto.CloseSqlStreamReq): vo
 }
 
 function GetAutocommitStreamReq(_w: e.MessageWriter, _msg: proto.GetAutocommitStreamReq): void {
+}
+
+export function CursorReqBody(w: e.MessageWriter, msg: proto.CursorReqBody): void {
+    if (msg.baton !== undefined) { w.string(1, msg.baton); }
+    w.message(2, msg.batch, Batch);
 }

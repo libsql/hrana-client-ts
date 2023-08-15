@@ -57,6 +57,8 @@ function Value(w: e.ObjectWriter, msg: proto.Value): void {
     } else if (msg instanceof Uint8Array) {
         w.stringRaw("type", "blob");
         w.stringRaw("base64", Base64.fromUint8Array(msg));
+    } else if (msg === undefined) {
+        // do nothing
     } else {
         throw impossible(msg, "Impossible type of Value");
     }

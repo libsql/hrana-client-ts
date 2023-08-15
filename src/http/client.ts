@@ -8,24 +8,36 @@ import { ClosedError, ProtocolVersionError } from "../errors.js";
 import { HttpStream } from "./stream.js";
 
 export type Endpoint = {
-    pipelinePath: string,
     versionPath: string,
+    pipelinePath: string,
+    cursorPath: string | undefined,
     version: ProtocolVersion,
     encoding: ProtocolEncoding,
 };
 
 const checkEndpoints: Array<Endpoint> = [
     {
-        pipelinePath: "v3-protobuf/pipeline",
         versionPath: "v3-protobuf",
+        pipelinePath: "v3-protobuf/pipeline",
+        cursorPath: "v3-protobuf/cursor",
         version: 3,
         encoding: "protobuf",
     },
+    /*
+    {
+        versionPath: "v3",
+        pipelinePath: "v3/pipeline",
+        cursorPath: "v3/cursor",
+        version: 3,
+        encoding: "json",
+    },
+    */
 ];
 
 const fallbackEndpoint: Endpoint = {
-    pipelinePath: "v2/pipeline",
     versionPath: "v2",
+    pipelinePath: "v2/pipeline",
+    cursorPath: undefined,
     version: 2,
     encoding: "json",
 };
@@ -77,7 +89,7 @@ export class HttpClient extends Client {
         const fetch = this.#fetch;
         for (const endpoint of checkEndpoints) {
             const url = new URL(endpoint.versionPath, this.#url);
-            const request = new Request(url, {method: "GET"});
+            const request = new Request(url.toString(), {method: "GET"});
 
             const response = await fetch(request);
             await response.arrayBuffer();

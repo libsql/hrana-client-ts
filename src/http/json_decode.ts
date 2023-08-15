@@ -4,7 +4,7 @@ import { Error, StmtResult, BatchResult, CursorEntry, DescribeResult } from "../
 import * as proto from "./proto.js";
 
 
-export function PipelineResponseBody(obj: d.Obj): proto.PipelineResponseBody {
+export function PipelineRespBody(obj: d.Obj): proto.PipelineRespBody {
     const baton = d.stringOpt(obj["baton"]);
     const baseUrl = d.stringOpt(obj["base_url"]);
     const results = d.arrayObjectsMap(obj["results"], StreamResult);
@@ -49,4 +49,11 @@ function StreamResponse(obj: d.Obj): proto.StreamResponse {
     } else {
         throw new ProtoError("Unexpected type of StreamResponse");
     }
+}
+
+
+export function CursorRespBody(obj: d.Obj): proto.CursorRespBody {
+    const baton = d.stringOpt(obj["baton"]);
+    const baseUrl = d.stringOpt(obj["base_url"]);
+    return {baton, baseUrl};
 }

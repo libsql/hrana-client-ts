@@ -34,13 +34,7 @@ const Col: d.MessageDef<proto.Col> = {
 
 const Row: d.MessageDef<Array<proto.Value>> = {
     default() { return [] },
-    1 (r, msg) { 
-        const value = r.message(Value);
-        if (value === undefined) {
-            throw new ProtoError("Unrecognized type of Value");
-        }
-        msg.push(value);
-    },
+    1 (r, msg) { msg.push(r.message(Value)); },
 };
 
 
@@ -140,7 +134,7 @@ const DescribeCol: d.MessageDef<proto.DescribeCol> = {
 
 
 
-const Value: d.MessageDef<proto.Value | undefined> = {
+const Value: d.MessageDef<proto.Value> = {
     default() { return undefined },
     1 (r) { return null },
     2 (r) { return r.sint64() },

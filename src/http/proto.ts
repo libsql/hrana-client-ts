@@ -5,12 +5,12 @@ import { int32, Error, Stmt, StmtResult, Batch, BatchResult, DescribeResult } fr
 
 // ## Execute requests on a stream
 
-export type PipelineRequestBody = {
+export type PipelineReqBody = {
     baton: string | undefined,
     requests: Array<StreamRequest>,
 }
 
-export type PipelineResponseBody = {
+export type PipelineRespBody = {
     baton: string | undefined,
     baseUrl: string | undefined,
     results: Array<StreamResult>
@@ -29,6 +29,18 @@ export type StreamResultOk = {
 export type StreamResultError = {
     type: "error",
     error: Error,
+}
+
+// ## Execute a batch using a cursor
+
+export type CursorReqBody = {
+    baton: string | undefined,
+    batch: Batch,
+}
+
+export type CursorRespBody = {
+    baton: string | undefined,
+    baseUrl: string | undefined,
 }
 
 // ## Requests
