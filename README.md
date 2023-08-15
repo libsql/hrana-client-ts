@@ -6,7 +6,7 @@
 [github]: https://github.com/libsql/hrana-client-ts/
 [npm]: https://www.npmjs.com/package/@libsql/hrana-client
 
-This package implements a Hrana client for TypeScript. Hrana is the protocol for connecting to sqld using WebSockets or HTTP.
+This package implements a Hrana client for TypeScript. Hrana is the protocol for connecting to sqld using WebSocket or HTTP.
 
 > This package is intended mostly for internal use. Consider using the [`@libsql/client`][libsql-client] package, which will use Hrana automatically.
 
@@ -21,7 +21,7 @@ import * as hrana from "@libsql/hrana-client";
 // databases. 
 const url = process.env.URL ?? "ws://localhost:8080"; // Address of the sqld server
 const jwt = process.env.JWT; // JWT token for authentication
-// Here we are using Hrana over WebSockets:
+// Here we are using Hrana over WebSocket:
 const client = hrana.openWs(url, jwt);
 // But we can also use Hrana over HTTP:
 // const client = hrana.openHttp(url, jwt);

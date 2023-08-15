@@ -1,13 +1,13 @@
 {
   "name": "@libsql/hrana-client",
-  "version": "0.4.4-pre",
+  "version": "0.4.4",
   "keywords": [
     "hrana",
     "libsql",
     "sqld",
     "database"
   ],
-  "description": "Hrana client for connecting to sqld over HTTP or WebSockets",
+  "description": "Hrana client for connecting to sqld over HTTP or WebSocket",
   "repository": {
     "type": "git",
     "url": "github:libsql/hrana-client-ts"
