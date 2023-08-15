@@ -1,5 +1,7 @@
 # Changelog
 
+## Unreleased
+
 ## 0.4.4 -- 2023-08-15
 
 - Pass a `string` instead of `URL` to the `Request` constructor

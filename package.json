@@ -1,6 +1,6 @@
 {
   "name": "@libsql/hrana-client",
-  "version": "0.4.4",
+  "version": "0.4.5-pre",
   "keywords": [
     "hrana",
     "libsql",
