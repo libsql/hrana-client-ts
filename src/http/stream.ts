@@ -225,7 +225,7 @@ export class HttpStream extends Stream implements SqlOwner {
             headers.set("authorization", `Bearer ${this.#jwt}`);
         }
 
-        return new Request(url, {
+        return new Request(url.toString(), {
             method: "POST",
             headers,
             body: JSON.stringify(requestBody),
