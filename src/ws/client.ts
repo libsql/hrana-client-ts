@@ -266,7 +266,9 @@ export class WsClient extends Client implements SqlOwner {
 
     // Handle a message from the server.
     #handleMsg(msg: proto.ServerMsg): void {
-        if (msg.type === "hello_ok" || msg.type === "hello_error") {
+        if (msg.type === "none") {
+            throw new ProtoError("Received an unrecognized ServerMsg");
+        } else if (msg.type === "hello_ok" || msg.type === "hello_error") {
             if (this.#recvdHello) {
                 throw new ProtoError("Received a duplicated hello response");
             }
@@ -292,6 +294,7 @@ export class WsClient extends Client implements SqlOwner {
 
             try {
                 if (responseState.type !== msg.response.type) {
+                    console.dir({responseState, msg});
                     throw new ProtoError("Received unexpected type of response");
                 }
                 responseState.responseCallback(msg.response);
@@ -310,8 +313,6 @@ export class WsClient extends Client implements SqlOwner {
             this.#requestIdAlloc.free(requestId);
 
             responseState.errorCallback(errorFromProto(msg.error));
-        } else if (msg.type === "none") {
-            throw new ProtoError("Received an unrecognized ServerMsg");
         } else {
             throw impossible(msg, "Impossible ServerMsg type");
         }
