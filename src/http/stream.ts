@@ -177,8 +177,8 @@ export class HttpStream extends Stream implements SqlOwner {
     }
 
     /** @private */
-    _closeFromClient(): void {
-        this.#setClosed(new ClosedError("Client was closed", undefined));
+    _closeFromClient(error: Error): void {
+        this.#setClosed(new ClosedError("Client was closed", error));
     }
 
     /** True if the stream is closed. */
@@ -204,6 +204,18 @@ export class HttpStream extends Stream implements SqlOwner {
         }
     }
 
+    #abort(error: Error): void {
+        for (;;) {
+            const entry = this.#queue.shift();
+            if (entry !== undefined) {
+                entry.errorCallback(error);
+            } else {
+                break;
+            }
+        }
+        this.#setClosed(error);
+    }
+
     #sendStreamRequest(request: proto.StreamRequest): Promise<proto.StreamResponse> {
         return new Promise((responseCallback, errorCallback) => {
             this.#pushToQueue({type: "pipeline", request, responseCallback, errorCallback});
@@ -224,6 +236,15 @@ export class HttpStream extends Stream implements SqlOwner {
             return;
         }
 
+        const endpoint = this.#client._endpoint;
+        if (endpoint === undefined) {
+            this.#client._endpointPromise.then(
+                () => this.#flushQueue(),
+                (error) => this.#abort(error),
+            );
+            return;
+        }
+
         const firstEntry = this.#queue.shift();
         if (firstEntry === undefined) {
             return;
@@ -238,18 +259,18 @@ export class HttpStream extends Stream implements SqlOwner {
                     break;
                 }
             }
-            this.#flushPipeline(pipeline);
+            this.#flushPipeline(endpoint, pipeline);
         } else if (firstEntry.type === "cursor") {
-            this.#flushCursor(firstEntry);
+            this.#flushCursor(endpoint, firstEntry);
         } else {
             throw impossible(firstEntry, "Impossible type of QueueEntry");
         }
     }
 
-    #flushPipeline(pipeline: Array<PipelineEntry>): void {
+    #flushPipeline(endpoint: Endpoint, pipeline: Array<PipelineEntry>): void {
         this.#flush<proto.PipelineRespBody>(
-            (endpoint) => this.#createPipelineRequest(pipeline, endpoint),
-            (resp, encoding) => decodePipelineResponse(resp, encoding),
+            () => this.#createPipelineRequest(pipeline, endpoint),
+            (resp) => decodePipelineResponse(resp, endpoint.encoding),
             (respBody) => respBody.baton,
             (respBody) => respBody.baseUrl,
             (respBody) => handlePipelineResponse(pipeline, respBody),
@@ -257,10 +278,10 @@ export class HttpStream extends Stream implements SqlOwner {
         );
     }
 
-    #flushCursor(entry: CursorEntry): void {
+    #flushCursor(endpoint: Endpoint, entry: CursorEntry): void {
         this.#flush<[HttpCursor, proto.CursorRespBody]>(
-            (endpoint) => this.#createCursorRequest(entry, endpoint),
-            (resp, encoding) => HttpCursor.open(resp, encoding),
+            () => this.#createCursorRequest(entry, endpoint),
+            (resp) => HttpCursor.open(resp, endpoint.encoding),
             ([_cursor, respBody]) => respBody.baton,
             ([_cursor, respBody]) => respBody.baseUrl,
             ([cursor, _respBody]) => entry.cursorCallback(cursor),
@@ -269,18 +290,16 @@ export class HttpStream extends Stream implements SqlOwner {
     }
 
     #flush<R>(
-        createRequest: (_: Endpoint) => Request,
-        decodeResponse: (_: Response, __: ProtocolEncoding) => Promise<R>,
+        createRequest: () => Request,
+        decodeResponse: (_: Response) => Promise<R>,
         getBaton: (_: R) => string | undefined,
         getBaseUrl: (_: R) => string | undefined,
         handleResponse: (_: R) => void,
         handleError: (_: Error) => void,
     ): void {
-        const endpoint = this.#client._endpoint;
-
         let promise;
         try {
-            const request = createRequest(endpoint);
+            const request = createRequest();
             const fetch = this.#fetch;
             promise = fetch(request);
         } catch (error) {
@@ -294,7 +313,7 @@ export class HttpStream extends Stream implements SqlOwner {
                     throw error;
                 });
             }
-            return decodeResponse(resp, endpoint.encoding);
+            return decodeResponse(resp);
         }).then((r: R) => {
             this.#baton = getBaton(r);
             this.#baseUrl = getBaseUrl(r) ?? this.#baseUrl;

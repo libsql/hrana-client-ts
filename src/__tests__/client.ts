@@ -8,6 +8,16 @@ const jwt = process.env.JWT;
 const isWs = url.startsWith("ws:") || url.startsWith("wss:");
 const isHttp = url.startsWith("http:") || url.startsWith("https:");
 
+// HACK: patch the client to try Hrana 3 over HTTP with JSON, too (by default, only Protobuf is used)
+import { checkEndpoints } from "../http/client.js";
+checkEndpoints.push({
+    versionPath: "v3",
+    pipelinePath: "v3/pipeline",
+    cursorPath: "v3/cursor",
+    version: 3,
+    encoding: "json",
+});
+
 function withClient(f: (c: hrana.Client) => Promise<void>): () => Promise<void> {
     return async () => {
         let client: hrana.Client;
@@ -898,8 +908,6 @@ test("getVersion()", withClient(async (c) => {
         async function customFetch(this: unknown, request: Request): Promise<Response> {
             expect(request).toBeInstanceOf(Request);
             expect(this === undefined || this === globalThis).toBe(true);
-
-            expect(request.method).toStrictEqual("POST");
             expect(request.url.startsWith(url)).toBe(true);
 
             fetchCalledCount += 1;
@@ -912,7 +920,7 @@ test("getVersion()", withClient(async (c) => {
             const res = await s.queryValue("SELECT 1");
             expect(res.value).toStrictEqual(1);
 
-            expect(fetchCalledCount).toStrictEqual(1);
+            expect(fetchCalledCount).toBeGreaterThan(0);
         } finally {
             c.close();
         }

@@ -3,7 +3,7 @@ import { fetch, Request, Headers } from "@libsql/isomorphic-fetch";
 
 import type { ProtocolVersion, ProtocolEncoding } from "../client.js";
 import { Client } from "../client.js";
-import { ClosedError, ProtocolVersionError } from "../errors.js";
+import { ClientError, ClosedError, ProtocolVersionError } from "../errors.js";
 
 import { HttpStream } from "./stream.js";
 
@@ -15,7 +15,7 @@ export type Endpoint = {
     encoding: ProtocolEncoding,
 };
 
-const checkEndpoints: Array<Endpoint> = [
+export const checkEndpoints: Array<Endpoint> = [
     {
         versionPath: "v3-protobuf",
         pipelinePath: "v3-protobuf/pipeline",
@@ -48,13 +48,13 @@ export class HttpClient extends Client {
     #jwt: string | undefined;
     #fetch: typeof fetch;
 
-    #closed: boolean;
+    #closed: Error | undefined;
     #streams: Set<HttpStream>;
 
-    #versionPromise: Promise<ProtocolVersion> | undefined;
-    #versionReady: boolean;
     /** @private */
-    _endpoint: Endpoint;
+    _endpointPromise: Promise<Endpoint>;
+    /** @private */
+    _endpoint: Endpoint | undefined;
 
     /** @private */
     constructor(url: URL, jwt: string | undefined, customFetch: unknown | undefined) {
@@ -63,41 +63,22 @@ export class HttpClient extends Client {
         this.#jwt = jwt;
         this.#fetch = (customFetch as typeof fetch) ?? fetch;
 
-        this.#closed = false;
+        this.#closed = undefined;
         this.#streams = new Set();
 
-        this.#versionPromise = undefined;
-        this.#versionReady = false;
-        this._endpoint = fallbackEndpoint;
+        this._endpointPromise = findEndpoint(this.#fetch, this.#url);
+        this._endpointPromise.then(
+            (endpoint) => this._endpoint = endpoint,
+            (error) => this.#setClosed(error),
+        );
     }
 
     /** Get the protocol version supported by the server. */
-    override getVersion(): Promise<ProtocolVersion> {
-        if (this.#versionPromise !== undefined) {
-            return this.#versionPromise;
+    override async getVersion(): Promise<ProtocolVersion> {
+        if (this._endpoint !== undefined) {
+            return this._endpoint.version;
         }
-        const promise = this.#findEndpoint().then((endpoint) => {
-            this.#versionReady = true;
-            this._endpoint = endpoint;
-            return endpoint.version;
-        });
-        this.#versionPromise = promise;
-        return promise;
-    }
-
-    async #findEndpoint(): Promise<Endpoint> {
-        const fetch = this.#fetch;
-        for (const endpoint of checkEndpoints) {
-            const url = new URL(endpoint.versionPath, this.#url);
-            const request = new Request(url.toString(), {method: "GET"});
-
-            const response = await fetch(request);
-            await response.arrayBuffer();
-            if (response.ok) {
-                return endpoint;
-            }
-        }
-        return fallbackEndpoint;
+        return (await this._endpointPromise).version;
     }
 
     // Make sure that the negotiated version is at least `minVersion`.
@@ -105,7 +86,7 @@ export class HttpClient extends Client {
     override _ensureVersion(minVersion: ProtocolVersion, feature: string): void {
         if (minVersion <= fallbackEndpoint.version) {
             return;
-        } else if (!this.#versionReady) {
+        } else if (this._endpoint === undefined) {
             throw new ProtocolVersionError(
                 `${feature} is supported only on protocol version ${minVersion} and higher, ` +
                     "but the version supported by the HTTP server is not yet known. " +
@@ -121,8 +102,8 @@ export class HttpClient extends Client {
 
     /** Open a {@link HttpStream}, a stream for executing SQL statements. */
     override openStream(): HttpStream {
-        if (this.#closed) {
-            throw new ClosedError("Client is closed", undefined);
+        if (this.#closed !== undefined) {
+            throw new ClosedError("Client is closed", this.#closed);
         }
         const stream = new HttpStream(this, this.#url, this.#jwt, this.#fetch);
         this.#streams.add(stream);
@@ -136,14 +117,37 @@ export class HttpClient extends Client {
 
     /** Close the client and all its streams. */
     override close(): void {
-        this.#closed = true;
-        for (const stream of Array.from(this.#streams)) {
-            stream._closeFromClient();
-        }
+        this.#setClosed(new ClientError("Client was manually closed"));
     }
 
     /** True if the client is closed. */
     override get closed(): boolean {
-        return this.#closed;
+        return this.#closed !== undefined;
+    }
+
+    #setClosed(error: Error): void {
+        if (this.#closed !== undefined) {
+            return;
+        }
+        this.#closed = error;
+        for (const stream of Array.from(this.#streams)) {
+            stream._closeFromClient(error);
+        }
     }
 }
+
+async function findEndpoint(customFetch: typeof fetch, clientUrl: URL): Promise<Endpoint> {
+    const fetch = customFetch;
+    for (const endpoint of checkEndpoints) {
+        const url = new URL(endpoint.versionPath, clientUrl);
+        const request = new Request(url.toString(), {method: "GET"});
+
+        const response = await fetch(request);
+        await response.arrayBuffer();
+        if (response.ok) {
+            return endpoint;
+        }
+    }
+    return fallbackEndpoint;
+}
+
