@@ -34,14 +34,26 @@ jobs:
 
     - name: "Build"
       run: "npm run build"
-    - name: "Test version 1 over WebSockets"
+    - name: "Test version 1 over WebSocket"
       run: "python hrana-test-server/server_v1.py npm test"
       env: {"VERSION": "1", "URL": "ws://localhost:8080"}
-    - name: "Test version 2 over WebSockets"
+    - name: "Test version 2 over WebSocket"
       run: "python hrana-test-server/server_v2.py npm test"
       env: {"VERSION": "2", "URL": "ws://localhost:8080"}
     - name: "Test version 2 over HTTP"
       run: "python hrana-test-server/server_v2.py npm test"
       env: {"VERSION": "2", "URL": "http://localhost:8080"}
+    - name: "Test version 3 over WebSocket and JSON"
+      run: "python hrana-test-server/server_v3.py npm test"
+      env: {"VERSION": "3", "URL": "ws://localhost:8080", "ENCODING": "json"}
+    - name: "Test version 3 over WebSocket and Protobuf"
+      run: "python hrana-test-server/server_v3.py npm test"
+      env: {"VERSION": "3", "URL": "ws://localhost:8080", "ENCODING": "protobuf"}
+    - name: "Test version 3 over HTTP and JSON"
+      run: "python hrana-test-server/server_v3.py npm test"
+      env: {"VERSION": "3", "URL": "http://localhost:8080", "ENCODING": "json"}
+    - name: "Test version 3 over HTTP and Protobuf"
+      run: "python hrana-test-server/server_v3.py npm test"
+      env: {"VERSION": "3", "URL": "http://localhost:8080", "ENCODING": "protobuf"}
     - name: "Example"
-      run: "python hrana-test-server/server_v2.py node examples/readme_example.js"
+      run: "python hrana-test-server/server_v3.py node examples/readme_example.js"

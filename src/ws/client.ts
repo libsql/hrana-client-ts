@@ -1,15 +1,40 @@
 import { WebSocket } from "@libsql/isomorphic-ws";
 
-import type { ProtocolVersion } from "../client.js";
-import { Client, protocolVersions } from "../client.js";
-import { ClientError, ProtoError, ClosedError, WebSocketError, ProtocolVersionError } from "../errors.js";
+import type { ProtocolVersion, ProtocolEncoding } from "../client.js";
+import { Client } from "../client.js";
+import {
+    readJsonObject, writeJsonObject, readProtobufMessage, writeProtobufMessage,
+} from "../encoding/index.js";
+import {
+    ClientError, ProtoError, ClosedError, WebSocketError, ProtocolVersionError,
+    InternalError, MisuseError,
+} from "../errors.js";
 import { IdAlloc } from "../id_alloc.js";
 import { errorFromProto } from "../result.js";
 import { Sql, SqlOwner, SqlState } from "../sql.js";
+import { impossible } from "../util.js";
 
+import type { CursorState } from "./cursor.js";
 import type * as proto from "./proto.js";
 import type { StreamState } from "./stream.js";
 import { WsStream } from "./stream.js";
+
+import { ClientMsg as json_ClientMsg } from "./json_encode.js";
+import { ClientMsg as protobuf_ClientMsg } from "./protobuf_encode.js";
+import { ServerMsg as json_ServerMsg } from "./json_decode.js";
+import { ServerMsg as protobuf_ServerMsg } from "./protobuf_decode.js";
+
+export type Subprotocol = {
+    version: ProtocolVersion,
+    encoding: ProtocolEncoding,
+};
+
+export const subprotocols: Map<string, Subprotocol> = new Map([
+    ["hrana3-protobuf", {version: 3, encoding: "protobuf"}],
+    ["hrana3", {version: 3, encoding: "json"}],
+    ["hrana2", {version: 2, encoding: "json"}],
+    ["hrana1", {version: 1, encoding: "json"}],
+]);
 
 /** A client for the Hrana protocol over a WebSocket. */
 export class WsClient extends Client implements SqlOwner {
@@ -24,9 +49,9 @@ export class WsClient extends Client implements SqlOwner {
 
     // Have we received a response to our "hello" from the server?
     #recvdHello: boolean;
-    // Protocol version negotiated with the server. It is only available after the socket transitions to the
-    // OPEN state.
-    #version: ProtocolVersion | undefined;
+    // Subprotocol negotiated with the server. It is only available after the socket transitions to the OPEN
+    // state.
+    #subprotocol: Subprotocol | undefined;
     // Has the `getVersion()` function been called? This is only used to validate that the API is used
     // correctly.
     #getVersionCalled: boolean;
@@ -36,46 +61,49 @@ export class WsClient extends Client implements SqlOwner {
     #requestIdAlloc: IdAlloc;
     // An allocator of stream ids.
     #streamIdAlloc: IdAlloc;
+    // An allocator of cursor ids.
+    #cursorIdAlloc: IdAlloc;
     // An allocator of SQL text ids.
     #sqlIdAlloc: IdAlloc;
 
     /** @private */
-    constructor(socket: WebSocket, jwt: string | null) {
+    constructor(socket: WebSocket, jwt: string | undefined) {
         super();
 
         this.#socket = socket;
-        this.#socket.binaryType = "arraybuffer";
         this.#openCallbacks = [];
         this.#opened = false;
         this.#closed = undefined;
 
         this.#recvdHello = false;
-        this.#version = undefined;
+        this.#subprotocol = undefined;
         this.#getVersionCalled = false;
         this.#responseMap = new Map();
         this.#requestIdAlloc = new IdAlloc();
         this.#streamIdAlloc = new IdAlloc();
+        this.#cursorIdAlloc = new IdAlloc();
         this.#sqlIdAlloc = new IdAlloc();
 
+        this.#socket.binaryType = "arraybuffer";
         this.#socket.addEventListener("open", () => this.#onSocketOpen());
         this.#socket.addEventListener("close", (event) => this.#onSocketClose(event));
         this.#socket.addEventListener("error", (event) => this.#onSocketError(event));
         this.#socket.addEventListener("message", (event) => this.#onSocketMessage(event));
 
-        this.#send({"type": "hello", "jwt": jwt});
+        this.#send({type: "hello", jwt});
     }
 
     // Send (or enqueue to send) a message to the server.
     #send(msg: proto.ClientMsg): void {
         if (this.#closed !== undefined) {
-            throw new ClientError("Internal error: trying to send a message on a closed client");
+            throw new InternalError("Trying to send a message on a closed client");
         }
 
         if (this.#opened) {
             this.#sendToSocket(msg);
         } else {
             const openCallback = () => this.#sendToSocket(msg);
-            const errorCallback = (_: Error) => undefined;
+            const errorCallback = () => undefined;
             this.#openCallbacks.push({openCallback, errorCallback});
         }
     }
@@ -83,18 +111,17 @@ export class WsClient extends Client implements SqlOwner {
     // The socket transitioned from CONNECTING to OPEN
     #onSocketOpen(): void {
         const protocol = this.#socket.protocol;
-        if (protocol === "") {
-            this.#version = 1;
-        } else if (protocol === undefined) {
-            // TODO: This is a workaround for Miniflare, which does not support the `protocol` property on a
-            // WebSocket
-            this.#version = 1;
+        if (protocol === "" || protocol === undefined) {
+            // TODO: `protocol === undefined` is a workaround for Miniflare 2, which does not support the
+            // `protocol` property on a WebSocket
+            this.#subprotocol = {version: 1, encoding: "json"};
         } else {
-            this.#version = protocolVersions.get(protocol);
-            if (this.#version === undefined) {
+            this.#subprotocol = subprotocols.get(protocol);
+            if (this.#subprotocol === undefined) {
                 this.#setClosed(new ProtoError(
                     `Unrecognized WebSocket subprotocol: ${JSON.stringify(protocol)}`,
                 ));
+                return;
             }
         }
 
@@ -106,7 +133,16 @@ export class WsClient extends Client implements SqlOwner {
     }
 
     #sendToSocket(msg: proto.ClientMsg): void {
-        this.#socket.send(JSON.stringify(msg));
+        const encoding = this.#subprotocol!.encoding;
+        if (encoding === "json") {
+            const jsonMsg = writeJsonObject(msg, json_ClientMsg);
+            this.#socket.send(jsonMsg);
+        } else if (encoding === "protobuf") {
+            const protobufMsg = writeProtobufMessage(msg, protobuf_ClientMsg);
+            this.#socket.send(protobufMsg);
+        } else {
+            throw impossible(encoding, "Impossible encoding");
+        }
     }
 
     /** Get the protocol version negotiated with the server, possibly waiting until the socket is open. */
@@ -116,27 +152,27 @@ export class WsClient extends Client implements SqlOwner {
             if (this.#closed !== undefined) {
                 errorCallback(this.#closed);
             } else if (!this.#opened) {
-                const openCallback = () => versionCallback(this.#version!);
+                const openCallback = () => versionCallback(this.#subprotocol!.version);
                 this.#openCallbacks.push({openCallback, errorCallback});
             } else {
-                versionCallback(this.#version!);
+                versionCallback(this.#subprotocol!.version);
             }
         });
     }
 
     // Make sure that the negotiated version is at least `minVersion`.
     /** @private */
-    _ensureVersion(minVersion: ProtocolVersion, feature: string): void {
-        if (this.#version === undefined || !this.#getVersionCalled) {
+    override _ensureVersion(minVersion: ProtocolVersion, feature: string): void {
+        if (this.#subprotocol === undefined || !this.#getVersionCalled) {
             throw new ProtocolVersionError(
                 `${feature} is supported only on protocol version ${minVersion} and higher, ` +
-                    "but the version supported by the server is not yet known. Use WsClient.getVersion() " +
-                    "to wait until the version is available.",
+                    "but the version supported by the WebSocket server is not yet known. " +
+                    "Use Client.getVersion() to wait until the version is available.",
             );
-        } else if (this.#version < minVersion) {
+        } else if (this.#subprotocol.version < minVersion) {
             throw new ProtocolVersionError(
                 `${feature} is supported on protocol version ${minVersion} and higher, ` +
-                    `but the server only supports version ${this.#version}`
+                    `but the WebSocket server only supports version ${this.#subprotocol.version}`
             );
         }
     }
@@ -151,7 +187,7 @@ export class WsClient extends Client implements SqlOwner {
 
         const requestId = this.#requestIdAlloc.alloc();
         this.#responseMap.set(requestId, {...callbacks, type: request.type});
-        this.#send({"type": "request", "request_id": requestId, request});
+        this.#send({type: "request", requestId, request});
     }
 
     // The socket encountered an error.
@@ -197,14 +233,31 @@ export class WsClient extends Client implements SqlOwner {
             return;
         }
 
-        if (typeof event.data !== "string") {
-            this.#socket.close(3003, "Only string messages are accepted");
-            this.#setClosed(new ProtoError("Received non-string message from server"))
-            return;
-        }
-
         try {
-            this.#handleMsg(event.data);
+            let msg: proto.ServerMsg;
+
+            const encoding = this.#subprotocol!.encoding;
+            if (encoding === "json") {
+                if (typeof event.data !== "string") {
+                    this.#socket.close(3003, "Only text messages are accepted with JSON encoding");
+                    this.#setClosed(new ProtoError(
+                        "Received non-text message from server with JSON encoding"))
+                    return;
+                }
+                msg = readJsonObject(JSON.parse(event.data), json_ServerMsg);
+            } else if (encoding === "protobuf") {
+                if (!(event.data instanceof ArrayBuffer)) {
+                    this.#socket.close(3003, "Only binary messages are accepted with Protobuf encoding");
+                    this.#setClosed(new ProtoError(
+                        "Received non-binary message from server with Protobuf encoding"))
+                    return;
+                }
+                msg = readProtobufMessage(new Uint8Array(event.data), protobuf_ServerMsg);
+            } else {
+                throw impossible(encoding, "Impossible encoding");
+            }
+            
+            this.#handleMsg(msg);
         } catch (e) {
             this.#socket.close(3007, "Could not handle message");
             this.#setClosed(e as Error);
@@ -212,25 +265,25 @@ export class WsClient extends Client implements SqlOwner {
     }
 
     // Handle a message from the server.
-    #handleMsg(msgText: string): void {
-        const msg = JSON.parse(msgText) as proto.ServerMsg;
-
-        if (msg["type"] === "hello_ok" || msg["type"] === "hello_error") {
+    #handleMsg(msg: proto.ServerMsg): void {
+        if (msg.type === "none") {
+            throw new ProtoError("Received an unrecognized ServerMsg");
+        } else if (msg.type === "hello_ok" || msg.type === "hello_error") {
             if (this.#recvdHello) {
                 throw new ProtoError("Received a duplicated hello response");
             }
             this.#recvdHello = true;
 
-            if (msg["type"] === "hello_error") {
-                throw errorFromProto(msg["error"]);
+            if (msg.type === "hello_error") {
+                throw errorFromProto(msg.error);
             }
             return;
         } else if (!this.#recvdHello) {
             throw new ProtoError("Received a non-hello message before a hello response");
         }
 
-        if (msg["type"] === "response_ok") {
-            const requestId = msg["request_id"];
+        if (msg.type === "response_ok") {
+            const requestId = msg.requestId;
             const responseState = this.#responseMap.get(requestId);
             this.#responseMap.delete(requestId);
 
@@ -240,16 +293,17 @@ export class WsClient extends Client implements SqlOwner {
             this.#requestIdAlloc.free(requestId);
 
             try {
-                if (responseState.type !== msg["response"]["type"]) {
+                if (responseState.type !== msg.response.type) {
+                    console.dir({responseState, msg});
                     throw new ProtoError("Received unexpected type of response");
                 }
-                responseState.responseCallback(msg["response"]);
+                responseState.responseCallback(msg.response);
             } catch (e) {
                 responseState.errorCallback(e as Error);
                 throw e;
             }
-        } else if (msg["type"] === "response_error") {
-            const requestId = msg["request_id"];
+        } else if (msg.type === "response_error") {
+            const requestId = msg.requestId;
             const responseState = this.#responseMap.get(requestId);
             this.#responseMap.delete(requestId);
 
@@ -258,9 +312,9 @@ export class WsClient extends Client implements SqlOwner {
             }
             this.#requestIdAlloc.free(requestId);
 
-            responseState.errorCallback(errorFromProto(msg["error"]));
+            responseState.errorCallback(errorFromProto(msg.error));
         } else {
-            throw new ProtoError("Received unexpected message type");
+            throw impossible(msg, "Impossible ServerMsg type");
         }
     }
 
@@ -270,14 +324,15 @@ export class WsClient extends Client implements SqlOwner {
         const streamState = {
             streamId,
             closed: undefined,
+            cursorState: undefined,
         };
 
         const responseCallback = () => undefined;
         const errorCallback = (e: Error) => this._closeStream(streamState, e);
 
         const request: proto.OpenStreamReq = {
-            "type": "open_stream",
-            "stream_id": streamId,
+            type: "open_stream",
+            streamId,
         };
         this._sendRequest(request, {responseCallback, errorCallback});
 
@@ -287,17 +342,25 @@ export class WsClient extends Client implements SqlOwner {
     // Make sure that the stream is closed.
     /** @private */
     _closeStream(streamState: StreamState, error: Error): void {
-        if (streamState.closed !== undefined || this.#closed !== undefined) {
+        if (streamState.closed ?? this.#closed !== undefined) {
             return;
         }
         streamState.closed = error;
 
+        const cursorState = streamState.cursorState;
+        if (cursorState !== undefined && cursorState.closed === undefined) {
+            cursorState.closed = error;
+        }
+
         const callback = () => {
             this.#streamIdAlloc.free(streamState.streamId);
+            if (cursorState !== undefined) {
+                this.#cursorIdAlloc.free(cursorState.cursorId);
+            }
         };
         const request: proto.CloseStreamReq = {
-            "type": "close_stream",
-            "stream_id": streamState.streamId,
+            type: "close_stream",
+            streamId: streamState.streamId,
         };
         this._sendRequest(request, {responseCallback: callback, errorCallback: callback});
     }
@@ -310,6 +373,58 @@ export class WsClient extends Client implements SqlOwner {
             return;
         }
         this._sendRequest(request, callbacks);
+    }
+
+    // Open a cursor for the given stream executing given batch.
+    /** @private */
+    _openCursor(streamState: StreamState, batch: proto.Batch): CursorState {
+        this._ensureVersion(3, "cursor");
+        if (streamState.cursorState !== undefined) {
+            throw new InternalError("Cannot open multiple cursors on the same stream");
+        }
+
+        const cursorId = this.#cursorIdAlloc.alloc();
+        const cursorState = {
+            cursorId,
+            done: false,
+            closed: undefined,
+        };
+
+        const responseCallback = () => undefined;
+        const errorCallback = (e: Error) => this._closeCursor(streamState, cursorState, e);
+
+        const request: proto.OpenCursorReq = {
+            type: "open_cursor",
+            streamId: streamState.streamId,
+            cursorId,
+            batch,
+        };
+        this._sendStreamRequest(streamState, request, {responseCallback, errorCallback});
+
+        streamState.cursorState = cursorState;
+        return cursorState;
+    }
+
+    // Make sure that the cursor is closed.
+    /** @private */
+    _closeCursor(streamState: StreamState, cursorState: CursorState, error: Error): void {
+        if (cursorState.closed ?? streamState.closed ?? this.#closed !== undefined) {
+            return;
+        }
+        cursorState.closed = error;
+
+        const callback = () => {
+            this.#cursorIdAlloc.free(cursorState.cursorId);
+        };
+        const request: proto.CloseCursorReq = {
+            type: "close_cursor",
+            cursorId: cursorState.cursorId,
+        };
+        this._sendRequest(request, {responseCallback: callback, errorCallback: callback});
+
+        if (streamState.cursorState === cursorState) {
+            streamState.cursorState = undefined;
+        }
     }
 
     /** Cache a SQL text on the server. This requires protocol version 2 or higher. */
@@ -326,11 +441,7 @@ export class WsClient extends Client implements SqlOwner {
         const responseCallback = () => undefined;
         const errorCallback = (e: Error) => this._closeSql(sqlState, e);
 
-        const request: proto.StoreSqlReq = {
-            "type": "store_sql",
-            "sql_id": sqlId,
-            "sql": sql,
-        };
+        const request: proto.StoreSqlReq = {type: "store_sql", sqlId, sql};
         this._sendRequest(request, {responseCallback, errorCallback});
 
         return new Sql(this, sqlState);
@@ -347,10 +458,7 @@ export class WsClient extends Client implements SqlOwner {
         const callback = () => {
             this.#sqlIdAlloc.free(sqlState.sqlId);
         };
-        const request: proto.CloseSqlReq = {
-            "type": "close_sql",
-            "sql_id": sqlState.sqlId,
-        };
+        const request: proto.CloseSqlReq = {type: "close_sql", sqlId: sqlState.sqlId};
         this._sendRequest(request, {responseCallback: callback, errorCallback: callback});
     }
 

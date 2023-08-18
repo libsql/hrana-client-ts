@@ -1,16 +1,16 @@
 import { ClientError, ProtoError, ResponseError } from "./errors.js";
+import type * as proto from "./shared/proto.js";
 import type { Value, IntMode } from "./value.js";
 import { valueFromProto } from "./value.js";
-import type * as proto from "./proto.js";
 
 /** Result of executing a database statement. */
 export interface StmtResult {
     /** Number of rows that were changed by the statement. This is meaningful only if the statement was an
      * INSERT, UPDATE or DELETE, and the value is otherwise undefined. */
     affectedRowCount: number;
-    /** The ROWID of the last successful insert into a rowid table. This is a 64-big signed integer encoded as
-     * a string. For other statements than INSERTs into a rowid table, the value is not specified. */
-    lastInsertRowid: string | undefined;
+    /** The ROWID of the last successful insert into a rowid table. This is a 64-big signed integer. For other
+     * statements than INSERTs into a rowid table, the value is not specified. */
+    lastInsertRowid: bigint | undefined;
     /** Names of columns in the result. */
     columnNames: Array<string | undefined>;
     /** Declared types of columns in the result. */
@@ -45,16 +45,16 @@ export interface Row {
 
 export function stmtResultFromProto(result: proto.StmtResult): StmtResult {
     return {
-        affectedRowCount: result["affected_row_count"],
-        lastInsertRowid: result["last_insert_rowid"] ?? undefined,
-        columnNames: result["cols"].map(col => col["name"] ?? undefined),
-        columnDecltypes: result["cols"].map(col => col["decltype"] ?? undefined),
+        affectedRowCount: result.affectedRowCount,
+        lastInsertRowid: result.lastInsertRowid,
+        columnNames: result.cols.map(col => col.name),
+        columnDecltypes: result.cols.map(col => col.decltype),
     };
 }
 
 export function rowsResultFromProto(result: proto.StmtResult, intMode: IntMode): RowsResult {
     const stmtResult = stmtResultFromProto(result);
-    const rows = result["rows"].map(row => rowFromProto(stmtResult.columnNames, row, intMode));
+    const rows = result.rows.map(row => rowFromProto(stmtResult.columnNames, row, intMode));
     return {...stmtResult, rows};
 }
 
@@ -97,5 +97,5 @@ function rowFromProto(
 }
 
 export function errorFromProto(error: proto.Error): ResponseError {
-    return new ResponseError(error["message"], error);
+    return new ResponseError(error.message, error);
 }

@@ -1,12 +1,14 @@
 import { Batch } from "./batch.js";
+import type { Client } from "./client.js";
+import type { Cursor } from "./cursor.js";
 import type { DescribeResult } from "./describe.js";
 import { describeResultFromProto } from "./describe.js";
-import type * as proto from "./proto.js";
 import type { RowsResult, RowResult, ValueResult, StmtResult } from "./result.js";
 import {
     stmtResultFromProto, rowsResultFromProto,
     rowResultFromProto, valueResultFromProto,
 } from "./result.js";
+import type * as proto from "./shared/proto.js";
 import type { InSql, SqlOwner, ProtoSql } from "./sql.js";
 import { sqlToProto } from "./sql.js";
 import type { InStmt } from "./stmt.js";
@@ -20,7 +22,10 @@ export abstract class Stream {
         this.intMode = intMode;
     }
 
-    /** @private*/
+    /** Get the client object that this stream belongs to. */
+    abstract client(): Client;
+
+    /** @private */
     abstract _sqlOwner(): SqlOwner;
     /** @private */
     abstract _execute(stmt: proto.Stmt): Promise<proto.StmtResult>;
@@ -30,6 +35,8 @@ export abstract class Stream {
     abstract _describe(protoSql: ProtoSql): Promise<proto.DescribeResult>;
     /** @private */
     abstract _sequence(protoSql: ProtoSql): Promise<void>;
+    /** @private */
+    abstract _openCursor(batch: proto.Batch): Promise<Cursor>;
 
     /** Execute a statement and return rows. */
     query(stmt: InStmt): Promise<RowsResult> {
@@ -60,9 +67,14 @@ export abstract class Stream {
         return this._execute(stmt).then((r) => fromProto(r, this.intMode));
     }
 
-    /** Return a builder for creating and executing a batch. */
-    batch(): Batch {
-        return new Batch(this);
+    /** Return a builder for creating and executing a batch.
+     *
+     * If `useCursor` is true, the batch will be executed using a Hrana cursor, which will stream results from
+     * the server to the client, which consumes less memory on the server. This requires protocol version 3 or
+     * higher.
+     */
+    batch(useCursor: boolean = false): Batch {
+        return new Batch(this, useCursor);
     }
 
     /** Parse and analyze a statement. This requires protocol version 2 or higher. */
@@ -77,6 +89,11 @@ export abstract class Stream {
         const protoSql = sqlToProto(this._sqlOwner(), inSql);
         return this._sequence(protoSql);
     }
+
+    /** Check whether the SQL connection underlying this stream is in autocommit state (i.e., outside of an
+     * explicit transaction). This requires protocol version 3 or higher.
+     */
+    abstract getAutocommit(): Promise<boolean>;
 
     /** Close the stream. */
     abstract close(): void;

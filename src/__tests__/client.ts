@@ -8,6 +8,16 @@ const jwt = process.env.JWT;
 const isWs = url.startsWith("ws:") || url.startsWith("wss:");
 const isHttp = url.startsWith("http:") || url.startsWith("https:");
 
+// HACK: patch the client to try Hrana 3 over HTTP with JSON, too (by default, only Protobuf is used)
+import { checkEndpoints } from "../http/client.js";
+checkEndpoints.push({
+    versionPath: "v3",
+    pipelinePath: "v3/pipeline",
+    cursorPath: "v3/cursor",
+    version: 3,
+    encoding: "json",
+});
+
 function withClient(f: (c: hrana.Client) => Promise<void>): () => Promise<void> {
     return async () => {
         let client: hrana.Client;
@@ -143,7 +153,7 @@ test("Stream.run()", withClient(async (c) => {
     res = await s.run("INSERT INTO t VALUES (1, 'one'), (2, 'two'), (3, 'three')");
     expect(res.affectedRowCount).toStrictEqual(3);
     expect(res.lastInsertRowid).toBeDefined();
-    expect(res.lastInsertRowid).not.toStrictEqual("0");
+    expect(res.lastInsertRowid).not.toStrictEqual(0n);
 
     const rowsRes = await s.query("SELECT * FROM t ORDER BY num");
     expect(rowsRes.rows.length).toStrictEqual(3);
@@ -320,13 +330,13 @@ test("last insert rowid", withClient(async (c) => {
     await s.run("CREATE TABLE t (id INTEGER PRIMARY KEY)");
 
     let res = await s.run("INSERT INTO t VALUES (123)");
-    expect(res.lastInsertRowid).toStrictEqual("123");
+    expect(res.lastInsertRowid).toStrictEqual(123n);
 
     res = await s.run("INSERT INTO t VALUES (9223372036854775807)");
-    expect(res.lastInsertRowid).toStrictEqual("9223372036854775807");
+    expect(res.lastInsertRowid).toStrictEqual(9223372036854775807n);
 
     res = await s.run("INSERT INTO t VALUES (-9223372036854775808)");
-    expect(res.lastInsertRowid).toStrictEqual("-9223372036854775808");
+    expect(res.lastInsertRowid).toStrictEqual(-9223372036854775808n);
 }));
 
 test("column names", withClient(async (c) => {
@@ -479,117 +489,226 @@ describe("Stream.close()", () => {
     }));
 });
 
-describe("batches", () => {
-    test("empty", withClient(async (c) => {
-        const s = c.openStream();
-        const batch = s.batch();
-        await batch.execute();
-    }));
+for (const useCursor of [false, true]) {
+    (version >= 3 || !useCursor ? describe : describe.skip)(
+        useCursor ? "batches w/ cursor" : "batches w/o cursor",
+        () =>
+    {
+        test("empty", withClient(async (c) => {
+            if (useCursor) { await c.getVersion(); }
+            const s = c.openStream();
+            const batch = s.batch(useCursor);
+            await batch.execute();
+        }));
 
-    test("multiple statements", withClient(async (c) => {
-        const s = c.openStream();
-        const batch = s.batch();
-        const prom1 = batch.step().queryValue("SELECT 1");
-        const prom2 = batch.step().queryRow("SELECT 'one', 'two'");
-        await batch.execute();
-
-        expect((await prom1)!.value).toStrictEqual(1);
-        expect(Array.from((await prom2)!.row!)).toStrictEqual(["one", "two"]);
-    }));
-
-    test("failing statement", withClient(async (c) => {
-        const s = c.openStream();
-        const batch = s.batch();
-        const prom1 = batch.step().queryValue("SELECT 1");
-        const prom2 = batch.step().queryValue("SELECT foobar");
-        const prom3 = batch.step().queryValue("SELECT 2");
-        await batch.execute();
-
-        expect((await prom1)!.value).toStrictEqual(1);
-        await expect(prom2).rejects.toBeInstanceOf(hrana.ClientError);
-        expect((await prom3)!.value).toStrictEqual(2);
-    }));
-
-    test("ok condition", withClient(async (c) => {
-        const s = c.openStream();
-        const batch = s.batch();
-
-        const stepOk = batch.step();
-        stepOk.queryValue("SELECT 1");
-        const stepErr = batch.step();
-        stepErr.queryValue("SELECT foobar").catch(_ => undefined);
-
-        const prom1 = batch.step()
-            .condition(hrana.BatchCond.ok(stepOk))
-            .queryValue("SELECT 1");
-        const prom2 = batch.step()
-            .condition(hrana.BatchCond.ok(stepErr))
-            .queryValue("SELECT 1");
-        await batch.execute();
-
-        expect(await prom1).toBeDefined();
-        expect(await prom2).toBeUndefined();
-    }));
-
-    test("error condition", withClient(async (c) => {
-        const s = c.openStream();
-        const batch = s.batch();
-
-        const stepOk = batch.step();
-        stepOk.queryValue("SELECT 1");
-        const stepErr = batch.step();
-        stepErr.queryValue("SELECT foobar").catch(_ => undefined);
-
-        const prom1 = batch.step()
-            .condition(hrana.BatchCond.error(stepOk))
-            .queryValue("SELECT 1");
-        const prom2 = batch.step()
-            .condition(hrana.BatchCond.error(stepErr))
-            .queryValue("SELECT 1");
-        await batch.execute();
-
-        expect(await prom1).toBeUndefined();
-        expect(await prom2).toBeDefined();
-    }));
-
-    const andOrCases = [
-        {stmts: [], andOutput: true, orOutput: false},
-        {stmts: ["SELECT 1"], andOutput: true, orOutput: true},
-        {stmts: ["SELECT foobar"], andOutput: false, orOutput: false},
-        {stmts: ["SELECT 1", "SELECT foobar"], andOutput: false, orOutput: true},
-    ];
-
-    const andOr: Array<{
-        testName: string,
-        condFun: (_: Array<hrana.BatchCond>) => hrana.BatchCond,
-        expectedKey: "andOutput" | "orOutput",
-    }> = [
-        {testName: "and condition", condFun: hrana.BatchCond.and, expectedKey: "andOutput"},
-        {testName: "or condition", condFun: hrana.BatchCond.or, expectedKey: "orOutput"},
-    ];
-    for (const {testName, condFun, expectedKey} of andOr) {
-        test(testName, withClient(async (c) => {
+        test("multiple statements", withClient(async (c) => {
+            if (useCursor) { await c.getVersion(); }
             const s = c.openStream();
 
-            for (const testCase of andOrCases) {
-                const batch = s.batch();
-                const steps = testCase.stmts.map(stmt => {
-                    const step = batch.step();
-                    step.queryValue(stmt).catch(_ => undefined);
-                    return step;
-                });
+            const batch = s.batch(useCursor);
+            const prom1 = batch.step().queryValue("SELECT 1");
+            const prom2 = batch.step().queryRow("SELECT 'one', 'two'");
+            await batch.execute();
 
-                const testedCond = condFun(steps.map(hrana.BatchCond.ok));
+            expect((await prom1)!.value).toStrictEqual(1);
+            expect(Array.from((await prom2)!.row!)).toStrictEqual(["one", "two"]);
+        }));
+
+        test("failing statement", withClient(async (c) => {
+            if (useCursor) { await c.getVersion(); }
+            const s = c.openStream();
+            
+            const batch = s.batch(useCursor);
+            const prom1 = batch.step().queryValue("SELECT 1");
+            const prom2 = batch.step().queryValue("SELECT foobar");
+            const prom3 = batch.step().queryValue("SELECT 2");
+            prom2.catch(() => {}); // silence Node warning
+            await batch.execute();
+
+            expect((await prom1)!.value).toStrictEqual(1);
+            await expect(prom2).rejects.toBeInstanceOf(hrana.ClientError);
+            expect((await prom3)!.value).toStrictEqual(2);
+        }));
+
+        test("statement with invalid syntax", withClient(async (c) => {
+            if (useCursor) { await c.getVersion(); }
+            const s = c.openStream();
+
+            const batch = s.batch(useCursor);
+            const prom = batch.step().queryValue("spam");
+            await expect(batch.execute().then(() => prom)).rejects.toBeInstanceOf(hrana.ClientError);
+        }));
+
+        test("ok condition", withClient(async (c) => {
+            if (useCursor) { await c.getVersion(); }
+            const s = c.openStream();
+            const batch = s.batch(useCursor);
+
+            const stepOk = batch.step();
+            stepOk.queryValue("SELECT 1");
+            const stepErr = batch.step();
+            stepErr.queryValue("SELECT foospam").catch(_ => undefined);
+
+            const prom1 = batch.step()
+                .condition(hrana.BatchCond.ok(stepOk))
+                .queryValue("SELECT 1");
+            const prom2 = batch.step()
+                .condition(hrana.BatchCond.ok(stepErr))
+                .queryValue("SELECT 1");
+            await batch.execute();
+
+            expect(await prom1).toBeDefined();
+            expect(await prom2).toBeUndefined();
+        }));
+
+        test("error condition", withClient(async (c) => {
+            if (useCursor) { await c.getVersion(); }
+            const s = c.openStream();
+            const batch = s.batch(useCursor);
+
+            const stepOk = batch.step();
+            stepOk.queryValue("SELECT 1");
+            const stepErr = batch.step();
+            stepErr.queryValue("SELECT spameggs").catch(_ => undefined);
+
+            const prom1 = batch.step()
+                .condition(hrana.BatchCond.error(stepOk))
+                .queryValue("SELECT 1");
+            const prom2 = batch.step()
+                .condition(hrana.BatchCond.error(stepErr))
+                .queryValue("SELECT 1");
+            await batch.execute();
+
+            expect(await prom1).toBeUndefined();
+            expect(await prom2).toBeDefined();
+        }));
+
+        const andOrCases = [
+            {stmts: [], andOutput: true, orOutput: false},
+            {stmts: ["SELECT 1"], andOutput: true, orOutput: true},
+            {stmts: ["SELECT barfoo"], andOutput: false, orOutput: false},
+            {stmts: ["SELECT 1", "SELECT foobaz"], andOutput: false, orOutput: true},
+        ];
+
+        const andOr: Array<{
+            testName: string,
+            condFun: (batch: hrana.Batch, conds: Array<hrana.BatchCond>) => hrana.BatchCond,
+            expectedKey: "andOutput" | "orOutput",
+        }> = [
+            {testName: "and condition", condFun: hrana.BatchCond.and, expectedKey: "andOutput"},
+            {testName: "or condition", condFun: hrana.BatchCond.or, expectedKey: "orOutput"},
+        ];
+        for (const {testName, condFun, expectedKey} of andOr) {
+            test(testName, withClient(async (c) => {
+                if (useCursor) { await c.getVersion(); }
+                const s = c.openStream();
+
+                for (const testCase of andOrCases) {
+                    const batch = s.batch(useCursor);
+                    const steps = testCase.stmts.map(stmt => {
+                        const step = batch.step();
+                        step.queryValue(stmt).catch(_ => undefined);
+                        return step;
+                    });
+
+                    const testedCond = condFun(batch, steps.map(hrana.BatchCond.ok));
+                    const prom = batch.step()
+                        .condition(testedCond)
+                        .queryValue("SELECT 'yes'");
+                    await batch.execute();
+
+                    expect(await prom !== undefined).toStrictEqual(testCase[expectedKey]);
+                }
+            }));
+        }
+
+        (version >= 3 ? describe : describe.skip)("isAutocommit condition", () => {
+            test("in autocommit mode", withClient(async (c) => {
+                await c.getVersion();
+                const s = c.openStream();
+                const batch = s.batch(useCursor);
+
                 const prom = batch.step()
-                    .condition(testedCond)
-                    .queryValue("SELECT 'yes'");
+                    .condition(hrana.BatchCond.isAutocommit(batch))
+                    .queryValue("SELECT 42");
                 await batch.execute();
 
-                expect(await prom !== undefined).toStrictEqual(testCase[expectedKey]);
+                expect((await prom)!.value).toStrictEqual(42);
+            }));
+
+            test("in transaction", withClient(async (c) => {
+                await c.getVersion();
+                const s = c.openStream();
+                const batch = s.batch(useCursor);
+
+                batch.step().run("BEGIN");
+                const prom = batch.step()
+                    .condition(hrana.BatchCond.isAutocommit(batch))
+                    .queryValue("SELECT 42");
+                await batch.execute();
+
+                expect(await prom).toBeUndefined();
+            }));
+
+            test("after implicit rollback", withClient(async (c) => {
+                await c.getVersion();
+                const s = c.openStream();
+                await s.run("DROP TABLE IF EXISTS t");
+                await s.run("CREATE TABLE t (a UNIQUE)");
+                await s.run("INSERT INTO t VALUES (1)");
+
+                const batch = s.batch(useCursor);
+                const prom1 = batch.step()
+                    .run("INSERT OR ROLLBACK INTO t VALUES (1)");
+                prom1.catch(() => {}); // silence Node warning
+                const prom2 = batch.step()
+                    .condition(hrana.BatchCond.not(hrana.BatchCond.isAutocommit(batch)))
+                    .queryValue("SELECT 42");
+                await batch.execute();
+
+                await expect(prom1).rejects.toBeInstanceOf(hrana.ClientError);
+                expect(await prom2).toBeUndefined();
+            }));
+        });
+
+        test("large number of statements", withClient(async (c) => {
+            if (useCursor) { await c.getVersion(); }
+            const s = c.openStream();
+            const batch = s.batch(useCursor);
+
+            const proms = [];
+            for (let i = 0; i < 1000; ++i) {
+                proms.push(batch.step().queryValue(["SELECT 10*?", [i]]));
+            }
+            await batch.execute();
+
+            for (let i = 0; i < proms.length; ++i) {
+                expect((await proms[i])!.value).toStrictEqual(10*i);
             }
         }));
-    }
-});
+
+        test("statements that return large number of rows", withClient(async (c) => {
+            if (useCursor) { await c.getVersion(); }
+            const s = c.openStream();
+            const batch = s.batch(useCursor);
+
+            const proms = [];
+            for (let i = 0; i < 100; ++i) {
+                const sql = `
+                    WITH RECURSIVE t (a) AS (SELECT 1 UNION ALL SELECT a+1 FROM t)
+                    SELECT a FROM t LIMIT 10*?
+                `;
+                proms.push(batch.step().query([sql, [i]]));
+            }
+            await batch.execute();
+
+            for (let i = 0; i < proms.length; ++i) {
+                const result = (await proms[i])!;
+                expect(result.rows.length).toStrictEqual(10*i);
+            }
+        }));
+    });
+}
 
 (version >= 2 ? describe : describe.skip)("describe()", () => {
     test("trivial statement", withClient(async (c) => {
@@ -715,17 +834,22 @@ describe("batches", () => {
         expect((await s.queryValue([sql, [42]])).value).toStrictEqual(42);
     }));
 
-    test("batch", withSqlOwner(async (s, owner) => {
-        const sql1 = owner.storeSql("SELECT 11");
-        const sql2 = owner.storeSql("SELECT 'one', 'two'");
-        const batch = s.batch();
-        const prom1 = batch.step().queryValue(sql1);
-        const prom2 = batch.step().queryRow(sql2);
-        await batch.execute();
+    for (const useCursor of [false, true]) {
+        (version >= 3 || !useCursor ? test : test.skip)(
+            useCursor ? "batch w/ cursor" : "batch w/o cursor",
+            withSqlOwner(async (s, owner) => 
+        {
+            const sql1 = owner.storeSql("SELECT 11");
+            const sql2 = owner.storeSql("SELECT 'one', 'two'");
+            const batch = s.batch();
+            const prom1 = batch.step().queryValue(sql1);
+            const prom2 = batch.step().queryRow(sql2);
+            await batch.execute();
 
-        expect((await prom1)!.value).toStrictEqual(11);
-        expect(Array.from((await prom2)!.row!)).toStrictEqual(["one", "two"]);
-    }));
+            expect((await prom1)!.value).toStrictEqual(11);
+            expect(Array.from((await prom2)!.row!)).toStrictEqual(["one", "two"]);
+        }));
+    }
 
     test("describe", withSqlOwner(async (s, owner) => {
         const sql = owner.storeSql("SELECT :a, $b");
@@ -757,6 +881,26 @@ test("getVersion()", withClient(async (c) => {
     expect(await c.getVersion()).toBeGreaterThanOrEqual(version);
 }));
 
+(version >= 3 ? test : test.skip)("getAutocommit()", withClient(async (c) => {
+    await c.getVersion();
+    const s = c.openStream();
+    expect(await s.getAutocommit()).toStrictEqual(true);
+
+    await s.run("DROP TABLE IF EXISTS t");
+    await s.run("CREATE TABLE t (a UNIQUE)");
+    expect(await s.getAutocommit()).toStrictEqual(true);
+
+    await s.run("BEGIN");
+    expect(await s.getAutocommit()).toStrictEqual(false);
+
+    await s.run("INSERT INTO t VALUES (1)");
+    expect(await s.getAutocommit()).toStrictEqual(false);
+
+    await expect(s.run("INSERT OR ROLLBACK INTO t VALUES (1)"))
+        .rejects.toBeInstanceOf(hrana.ClientError);
+    expect(await s.getAutocommit()).toStrictEqual(true);
+}));
+
 (isHttp ? describe : describe.skip)("customFetch", () => {
     test("custom function is called", async () => {
         let fetchCalledCount = 0;
@@ -764,8 +908,6 @@ test("getVersion()", withClient(async (c) => {
         async function customFetch(this: unknown, request: Request): Promise<Response> {
             expect(request).toBeInstanceOf(Request);
             expect(this === undefined || this === globalThis).toBe(true);
-
-            expect(request.method).toStrictEqual("POST");
             expect(request.url.startsWith(url)).toBe(true);
 
             fetchCalledCount += 1;
@@ -778,7 +920,7 @@ test("getVersion()", withClient(async (c) => {
             const res = await s.queryValue("SELECT 1");
             expect(res.value).toStrictEqual(1);
 
-            expect(fetchCalledCount).toStrictEqual(1);
+            expect(fetchCalledCount).toBeGreaterThan(0);
         } finally {
             c.close();
         }

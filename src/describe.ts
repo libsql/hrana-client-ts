@@ -1,4 +1,4 @@
-import type * as proto from "./proto.js";
+import type * as proto from "./shared/proto.js";
 
 export interface DescribeResult {
     paramNames: Array<string | undefined>;
@@ -14,14 +14,9 @@ export interface DescribeColumn {
 
 export function describeResultFromProto(result: proto.DescribeResult): DescribeResult {
     return {
-        paramNames: result["params"].map((p) => p.name ?? undefined),
-        columns: result["cols"].map((c) => {
-            return {
-                name: c["name"],
-                decltype: c["decltype"] ?? undefined,
-            };
-        }),
-        isExplain: result["is_explain"],
-        isReadonly: result["is_readonly"],
+        paramNames: result.params.map((p) => p.name),
+        columns: result.cols,
+        isExplain: result.isExplain,
+        isReadonly: result.isReadonly,
     };
 }

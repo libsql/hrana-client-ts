@@ -1,11 +1,8 @@
 import type { Stream } from "./stream.js";
 import type { IntMode } from "./value.js";
 
-export type ProtocolVersion = 1 | 2;
-export const protocolVersions: Map<string, ProtocolVersion> = new Map([
-    ["hrana2", 2],
-    ["hrana1", 1],
-]);
+export type ProtocolVersion = 1 | 2 | 3;
+export type ProtocolEncoding = "json" | "protobuf";
 
 /** A client for the Hrana protocol (a "database connection pool"). */
 export abstract class Client {
@@ -16,6 +13,10 @@ export abstract class Client {
 
     /** Get the protocol version negotiated with the server. */
     abstract getVersion(): Promise<ProtocolVersion>;
+
+    // Make sure that the negotiated version is at least `minVersion`.
+    /** @private */
+    abstract _ensureVersion(minVersion: ProtocolVersion, feature: string): void;
 
     /** Open a {@link Stream}, a stream for executing SQL statements. */
     abstract openStream(): Stream;

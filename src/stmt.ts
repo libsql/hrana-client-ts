@@ -1,8 +1,8 @@
-import type * as proto from "./proto.js";
+import type * as proto from "./shared/proto.js";
 import type { InSql, SqlOwner } from "./sql.js";
 import { sqlToProto } from "./sql.js";
 import type { InValue } from "./value.js";
-import { valueToProto, protoNull } from "./value.js";
+import { valueToProto } from "./value.js";
 
 /** A statement that you can send to the database. Statements are represented by the {@link Stmt} class, but
  * as a shorthand, you can specify an SQL text without arguments, or a tuple with the SQL text and positional
@@ -50,7 +50,7 @@ export class Stmt {
         }
 
         while (this._args.length < index) {
-            this._args.push(protoNull);
+            this._args.push(null);
         }
         this._args[index - 1] = valueToProto(value);
 
@@ -71,7 +71,11 @@ export class Stmt {
     }
 }
 
-export function stmtToProto(sqlOwner: SqlOwner, stmt: InStmt, wantRows: boolean): proto.Stmt {
+export function stmtToProto(
+    sqlOwner: SqlOwner,
+    stmt: InStmt,
+    wantRows: boolean,
+): proto.Stmt {
     let inSql: InSql;
     let args: Array<proto.Value> = [];
     let namedArgs: Array<proto.NamedArg> = [];
@@ -79,16 +83,15 @@ export function stmtToProto(sqlOwner: SqlOwner, stmt: InStmt, wantRows: boolean)
         inSql = stmt.sql;
         args = stmt._args;
         for (const [name, value] of stmt._namedArgs.entries()) {
-            namedArgs.push({"name": name, "value": value});
+            namedArgs.push({name, value});
         }
     } else if (Array.isArray(stmt)) {
         inSql = stmt[0];
         if (Array.isArray(stmt[1])) {
-            args = stmt[1].map(valueToProto);
+            args = stmt[1].map((arg) => valueToProto(arg));
         } else {
-            namedArgs = Object.entries(stmt[1]).map((entry) => {
-                const [key, value] = entry;
-                return {"name": key, "value": valueToProto(value)};
+            namedArgs = Object.entries(stmt[1]).map(([name, value]) => {
+                return {name, value: valueToProto(value)};
             });
         }
     } else {
@@ -96,12 +99,6 @@ export function stmtToProto(sqlOwner: SqlOwner, stmt: InStmt, wantRows: boolean)
     }
 
     const {sql, sqlId} = sqlToProto(sqlOwner, inSql);
-    return {
-        "sql": sql,
-        "sql_id": sqlId,
-        "args": args,
-        "named_args": namedArgs,
-        "want_rows": wantRows,
-    };
+    return {sql, sqlId, args, namedArgs, wantRows};
 }
 

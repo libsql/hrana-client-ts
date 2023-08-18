@@ -1,3 +1,5 @@
+import { InternalError } from "./errors.js";
+
 // An allocator of non-negative integer ids.
 //
 // This clever data structure has these "ideal" properties:
@@ -40,7 +42,7 @@ export class IdAlloc {
 
     free(id: number) {
         if (!this.#usedIds.delete(id)) {
-            throw new Error("Freeing an id that is not allocated");
+            throw new InternalError("Freeing an id that is not allocated");
         }
 
         // maintain the invariant of `#freeIds`

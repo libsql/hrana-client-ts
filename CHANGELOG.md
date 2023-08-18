@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Added support for Hrana 3**, which included some API changes:
+    - Added variant `3` to the `ProtocolVersion` type
+    - Added `BatchCond.isAutocommit()`
+    - Added `Stream.getAutocommit()`
+    - Added parameter `useCursor` to `Stream.batch()`
+- Changed type of `StmtResult.lastInsertRowid` to bigint
+- Changed `BatchCond.and()` and `BatchCond.or()` to pass the `Batch` object
+- Added `Stream.client()`
+- Added `MisuseError` and `InternalError`
+
 ## 0.4.4 -- 2023-08-15
 
 - Pass a `string` instead of `URL` to the `Request` constructor
