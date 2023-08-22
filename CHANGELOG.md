@@ -13,6 +13,8 @@
 - Changed `BatchCond.and()` and `BatchCond.or()` to pass the `Batch` object
 - Added `Stream.client()`
 - Added `MisuseError` and `InternalError`
+- Added reexport of `WebSocket` from `@libsql/isomorphic-ws`
+- Added reexports of `fetch`, `Request`, `Response` and other types from `@libsql/isomorphic-fetch`
 
 ## 0.4.4 -- 2023-08-15
 

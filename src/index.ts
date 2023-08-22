@@ -6,6 +6,10 @@ import { WebSocketUnsupportedError } from "./errors.js";
 import { HttpClient } from "./http/client.js";
 import { WsClient } from "./ws/client.js";
 
+export { WebSocket } from "@libsql/isomorphic-ws";
+export type { RequestInit, Response } from "@libsql/isomorphic-fetch";
+export { fetch, Request, Headers } from "@libsql/isomorphic-fetch";
+
 export type { ProtocolVersion, ProtocolEncoding } from "./client.js";
 export { Client } from "./client.js";
 export type { DescribeResult, DescribeColumn } from "./describe.js";
