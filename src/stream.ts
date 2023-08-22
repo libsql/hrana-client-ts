@@ -95,10 +95,24 @@ export abstract class Stream {
      */
     abstract getAutocommit(): Promise<boolean>;
 
-    /** Close the stream. */
+    /** Immediately close the stream.
+     *
+     * This closes the stream immediately, aborting any pending operations.
+     */
     abstract close(): void;
 
-    /** True if the stream is closed. */
+    /** Gracefully close the stream.
+     *
+     * After calling this method, you will not be able to start new operations, but existing operations will
+     * complete.
+     */
+    abstract closeGracefully(): void;
+
+    /** True if the stream is closed or closing.
+     *
+     * If you call {@link closeGracefully}, this will become true immediately, even if the underlying stream
+     * is not physically closed yet.
+     */
     abstract get closed(): boolean;
 
     /** Representation of integers returned from the database. See {@link IntMode}.

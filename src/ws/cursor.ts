@@ -4,42 +4,39 @@ import { Queue } from "../queue.js";
 
 import type { WsClient } from "./client.js";
 import type * as proto from "./proto.js";
-import type { StreamState } from "./stream.js";
-
-export interface CursorState {
-    cursorId: number;
-    closed: Error | undefined;
-}
+import type { WsStream } from "./stream.js";
 
 const fetchChunkSize = 1000;
 const fetchQueueSize = 10;
 
 export class WsCursor extends Cursor {
     #client: WsClient;
-    #streamState: StreamState;
-    #state: CursorState;
+    #stream: WsStream;
+    #cursorId: number;
 
-    #done: boolean;
     #entryQueue: Queue<proto.CursorEntry>;
     #fetchQueue: Queue<Promise<proto.FetchCursorResp | undefined>>;
+    #closed: Error | undefined;
+    #done: boolean;
 
     /** @private */
-    constructor(client: WsClient, streamState: StreamState, state: CursorState) {
+    constructor(client: WsClient, stream: WsStream, cursorId: number) {
         super();
         this.#client = client;
-        this.#streamState = streamState;
-        this.#state = state;
+        this.#stream = stream;
+        this.#cursorId = cursorId;
 
-        this.#done = false;
         this.#entryQueue = new Queue();
         this.#fetchQueue = new Queue();
+        this.#closed = undefined;
+        this.#done = false;
     }
 
     /** Fetch the next entry from the cursor. */
     override async next(): Promise<proto.CursorEntry | undefined> {
         for (;;) {
-            if (this.#state.closed !== undefined) {
-                throw new ClosedError("Cursor is closed", this.#state.closed);
+            if (this.#closed !== undefined) {
+                throw new ClosedError("Cursor is closed", this.#closed);
             }
 
             while (!this.#done && this.#fetchQueue.length < fetchQueueSize) {
@@ -52,47 +49,53 @@ export class WsCursor extends Cursor {
             }
 
             // we assume that `Cursor.next()` is never called concurrently
-            await this.#fetchQueue.shift()!.then(
-                (response) => {
-                    if (response === undefined) {
-                        return;
-                    }
-                    for (const entry of response.entries) {
-                        this.#entryQueue.push(entry);
-                    }
-                    this.#done ||= response.done;
+            await this.#fetchQueue.shift()!.then((response) => {
+                if (response === undefined) {
+                    return;
                 }
-            );
+                for (const entry of response.entries) {
+                    this.#entryQueue.push(entry);
+                }
+                this.#done ||= response.done;
+            });
         }
     }
 
     #fetch(): Promise<proto.FetchCursorResp | undefined> {
-        return new Promise((responseCallback, errorCallback) => {
-            const request: proto.FetchCursorReq = {
-                type: "fetch_cursor",
-                cursorId: this.#state.cursorId,
-                maxCount: fetchChunkSize,
-            };
-            this.#client._sendStreamRequest(this.#streamState, request, {
-                responseCallback: responseCallback as (_: proto.Response) => void,
-                errorCallback: (error) => {
-                    this.#client._closeCursor(this.#streamState, this.#state, error);
-                    responseCallback(undefined);
-                },
-            });
-        });
+        return this.#stream._sendCursorRequest(this, {
+            type: "fetch_cursor",
+            cursorId: this.#cursorId,
+            maxCount: fetchChunkSize,
+        }).then(
+            (resp: proto.Response) => resp as proto.FetchCursorResp,
+            (error) => {
+                this._setClosed(error);
+                return undefined;
+            },
+        );
+    }
+
+    /** @private */
+    _setClosed(error: Error): void {
+        if (this.#closed !== undefined) {
+            return;
+        }
+        this.#closed = error;
+
+        this.#stream._sendCursorRequest(this, {
+            type: "close_cursor",
+            cursorId: this.#cursorId,
+        }).catch(() => undefined);
+        this.#stream._cursorClosed(this);
     }
 
     /** Close the cursor. */
     override close(): void {
-        this.#client._closeCursor(
-            this.#streamState, this.#state,
-            new ClientError("Cursor was manually closed"),
-        );
+        this._setClosed(new ClientError("Cursor was manually closed"));
     }
 
     /** True if the cursor is closed. */
     override get closed(): boolean {
-        return this.#state.closed !== undefined;
+        return this.#closed !== undefined;
     }
 }

@@ -21,7 +21,10 @@ export abstract class Client {
     /** Open a {@link Stream}, a stream for executing SQL statements. */
     abstract openStream(): Stream;
 
-    /** Close the client. */
+    /** Immediately close the client.
+     *
+     * This closes the client immediately, aborting any pending operations.
+     */
     abstract close(): void;
 
     /** True if the client is closed. */

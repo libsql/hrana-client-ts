@@ -13,10 +13,10 @@ import {
     readJsonObject, writeJsonObject, readProtobufMessage, writeProtobufMessage,
 } from "../encoding/index.js";
 import { IdAlloc } from "../id_alloc.js";
-import { queueMicrotask } from "../ponyfill.js";
 import { Queue } from "../queue.js";
+import { queueMicrotask } from "../queue_microtask.js";
 import { errorFromProto } from "../result.js";
-import type { SqlOwner, SqlState, ProtoSql } from "../sql.js";
+import type { SqlOwner, ProtoSql } from "../sql.js";
 import { Sql } from "../sql.js";
 import { Stream } from "../stream.js";
 import { impossible } from "../util.js";
@@ -54,10 +54,12 @@ export class HttpStream extends Stream implements SqlOwner {
     #jwt: string | undefined;
     #fetch: typeof fetch;
 
-    #closed: Error | undefined;
     #baton: string | undefined;
     #queue: Queue<QueueEntry>;
     #flushing: boolean;
+    #cursor: HttpCursor | undefined;
+    #closing: boolean;
+    #closed: Error | undefined;
 
     #sqlIdAlloc: IdAlloc;
 
@@ -69,10 +71,11 @@ export class HttpStream extends Stream implements SqlOwner {
         this.#jwt = jwt;
         this.#fetch = customFetch;
 
-        this.#closed = undefined;
         this.#baton = undefined;
         this.#queue = new Queue();
         this.#flushing = false;
+        this.#closing = false;
+        this.#closed = undefined;
 
         this.#sqlIdAlloc = new IdAlloc();
     }
@@ -90,29 +93,22 @@ export class HttpStream extends Stream implements SqlOwner {
     /** Cache a SQL text on the server. */
     storeSql(sql: string): Sql {
         const sqlId = this.#sqlIdAlloc.alloc();
-        const sqlState = {
-            sqlId,
-            closed: undefined,
-        };
-
         this.#sendStreamRequest({type: "store_sql", sqlId, sql}).then(
             () => undefined,
-            (error) => this.#setClosed(error),
+            (error) => this._setClosed(error),
         );
-
-        return new Sql(this, sqlState);
+        return new Sql(this, sqlId);
     }
 
     /** @private */
-    _closeSql(sqlState: SqlState, error: Error): void {
-        if (sqlState.closed !== undefined || this.#closed !== undefined) {
+    _closeSql(sqlId: number): void {
+        if (this.#closed !== undefined) {
             return;
         }
-        sqlState.closed = error;
 
-        this.#sendStreamRequest({type: "close_sql", sqlId: sqlState.sqlId}).then(
-            () => this.#sqlIdAlloc.free(sqlState.sqlId),
-            (error) => this.#setClosed(error),
+        this.#sendStreamRequest({type: "close_sql", sqlId}).then(
+            () => this.#sqlIdAlloc.free(sqlId),
+            (error) => this._setClosed(error),
         );
     }
 
@@ -152,13 +148,6 @@ export class HttpStream extends Stream implements SqlOwner {
         });
     }
 
-    /** @private */
-    override _openCursor(batch: proto.Batch): Promise<HttpCursor> {
-        return new Promise((cursorCallback, errorCallback) => {
-            this.#pushToQueue({type: "cursor", batch, cursorCallback, errorCallback});
-        });
-    }
-
     /** Check whether the SQL connection underlying this stream is in autocommit state (i.e., outside of an
      * explicit transaction). This requires protocol version 3 or higher.
      */
@@ -171,40 +160,56 @@ export class HttpStream extends Stream implements SqlOwner {
         });
     }
 
-    /** Close the stream. */
-    override close(): void {
-        this.#setClosed(new ClientError("Stream was manually closed"));
+    #sendStreamRequest(request: proto.StreamRequest): Promise<proto.StreamResponse> {
+        return new Promise((responseCallback, errorCallback) => {
+            this.#pushToQueue({type: "pipeline", request, responseCallback, errorCallback});
+        });
     }
 
     /** @private */
-    _closeFromClient(error: Error): void {
-        this.#setClosed(new ClosedError("Client was closed", error));
+    override _openCursor(batch: proto.Batch): Promise<HttpCursor> {
+        return new Promise((cursorCallback, errorCallback) => {
+            this.#pushToQueue({type: "cursor", batch, cursorCallback, errorCallback});
+        });
+    }
+
+    /** @private */
+    _cursorClosed(cursor: HttpCursor): void {
+        if (cursor !== this.#cursor) {
+            throw new InternalError("Cursor was closed, but it was not associated with the stream");
+        }
+        this.#cursor = undefined;
+        queueMicrotask(() => this.#flushQueue());
+    }
+
+    /** Immediately close the stream. */
+    override close(): void {
+        this._setClosed(new ClientError("Stream was manually closed"));
+    }
+
+    /** Gracefully close the stream. */
+    override closeGracefully(): void {
+        this.#closing = true;
+        queueMicrotask(() => this.#flushQueue());
     }
 
     /** True if the stream is closed. */
     override get closed(): boolean {
-        return this.#closed !== undefined;
+        return this.#closed !== undefined || this.#closing;
     }
 
-    #setClosed(error: Error): void {
+    /** @private */
+    _setClosed(error: Error): void {
         if (this.#closed !== undefined) {
             return;
         }
         this.#closed = error;
+
+        if (this.#cursor !== undefined) {
+            this.#cursor._setClosed(error);
+        }
         this.#client._streamClosed(this);
 
-        if (this.#baton !== undefined || this.#queue.length !== 0 || this.#flushing) {
-            this.#queue.push({
-                type: "pipeline",
-                request: {type: "close"},
-                responseCallback() {},
-                errorCallback() {},
-            });
-            this.#flushQueue();
-        }
-    }
-
-    #abort(error: Error): void {
         for (;;) {
             const entry = this.#queue.shift();
             if (entry !== undefined) {
@@ -213,26 +218,36 @@ export class HttpStream extends Stream implements SqlOwner {
                 break;
             }
         }
-        this.#setClosed(error);
-    }
 
-    #sendStreamRequest(request: proto.StreamRequest): Promise<proto.StreamResponse> {
-        return new Promise((responseCallback, errorCallback) => {
-            this.#pushToQueue({type: "pipeline", request, responseCallback, errorCallback});
-        });
+        if (this.#baton !== undefined || this.#flushing) {
+            this.#queue.push({
+                type: "pipeline",
+                request: {type: "close"},
+                responseCallback() {},
+                errorCallback() {},
+            });
+            queueMicrotask(() => this.#flushQueue());
+        }
     }
 
     #pushToQueue(entry: QueueEntry): void {
         if (this.#closed !== undefined) {
             throw new ClosedError("Stream is closed", this.#closed);
+        } else if (this.#closing) {
+            throw new ClosedError("Stream is closing", undefined);
+        } else {
+            this.#queue.push(entry);
+            queueMicrotask(() => this.#flushQueue());
         }
-        this.#queue.push(entry);
-        queueMicrotask(() => this.#flushQueue());
     }
 
-
     #flushQueue(): void {
-        if (this.#flushing) {
+        if (this.#flushing || this.#cursor !== undefined) {
+            return;
+        }
+
+        if (this.#closing && this.#queue.length === 0) {
+            this._setClosed(new ClientError("Stream was gracefully closed"));
             return;
         }
 
@@ -240,7 +255,7 @@ export class HttpStream extends Stream implements SqlOwner {
         if (endpoint === undefined) {
             this.#client._endpointPromise.then(
                 () => this.#flushQueue(),
-                (error) => this.#abort(error),
+                (error) => this._setClosed(error),
             );
             return;
         }
@@ -279,12 +294,14 @@ export class HttpStream extends Stream implements SqlOwner {
     }
 
     #flushCursor(endpoint: Endpoint, entry: CursorEntry): void {
-        this.#flush<[HttpCursor, proto.CursorRespBody]>(
+        const cursor = new HttpCursor(this, endpoint.encoding);
+        this.#cursor = cursor;
+        this.#flush<proto.CursorRespBody>(
             () => this.#createCursorRequest(entry, endpoint),
-            (resp) => HttpCursor.open(resp, endpoint.encoding),
-            ([_cursor, respBody]) => respBody.baton,
-            ([_cursor, respBody]) => respBody.baseUrl,
-            ([cursor, _respBody]) => entry.cursorCallback(cursor),
+            (resp) => cursor.open(resp),
+            (respBody) => respBody.baton,
+            (respBody) => respBody.baseUrl,
+            (_respBody) => entry.cursorCallback(cursor),
             (error) => entry.errorCallback(error),
         );
     }
@@ -319,7 +336,7 @@ export class HttpStream extends Stream implements SqlOwner {
             this.#baseUrl = getBaseUrl(r) ?? this.#baseUrl;
             handleResponse(r);
         }).catch((error: Error) => {
-            this.#setClosed(error);
+            this._setClosed(error);
             handleError(error);
         }).finally(() => {
             this.#flushing = false;

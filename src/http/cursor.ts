@@ -5,10 +5,11 @@ import type { ProtocolEncoding } from "../client.js";
 import { Cursor } from "../cursor.js";
 import * as jsond from "../encoding/json/decode.js";
 import * as protobufd from "../encoding/protobuf/decode.js";
-import { ProtoError } from "../errors.js";
+import { ClientError, ClosedError, ProtoError, InternalError } from "../errors.js";
 import { impossible } from "../util.js";
 
 import type * as proto from "./proto.js";
+import type { HttpStream } from "./stream.js";
 
 import { CursorRespBody as json_CursorRespBody } from "./json_decode.js";
 import { CursorRespBody as protobuf_CursorRespBody } from "./protobuf_decode.js";
@@ -16,23 +17,75 @@ import { CursorEntry as json_CursorEntry } from "../shared/json_decode.js";
 import { CursorEntry as protobuf_CursorEntry } from "../shared/protobuf_decode.js";
 
 export class HttpCursor extends Cursor {
-    #reader: ReadableStreamDefaultReader<Uint8Array>;
+    #stream: HttpStream;
     #encoding: ProtocolEncoding;
-    #queue: ByteQueue;
 
-    closed: boolean;
+    #reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    #queue: ByteQueue;
+    #closed: Error | undefined;
+    #done: boolean;
 
     /** @private */
-    constructor(reader: ReadableStreamDefaultReader, encoding: ProtocolEncoding) {
+    constructor(stream: HttpStream, encoding: ProtocolEncoding) {
         super();
-        this.#reader = reader;
+        this.#stream = stream;
         this.#encoding = encoding;
+
+        this.#reader = undefined;
         this.#queue = new ByteQueue(16 * 1024);
-        this.closed = false;
+        this.#closed = undefined;
+        this.#done = false;
+    }
+
+    async open(response: Response): Promise<proto.CursorRespBody> {
+        if (response.body === null) {
+            throw new ProtoError("No response body for cursor request");
+        }
+
+        this.#reader = response.body.getReader();
+        const respBody = await this.#nextItem(json_CursorRespBody, protobuf_CursorRespBody);
+        if (respBody === undefined) {
+            throw new ProtoError("Empty response to cursor request");
+        }
+        return respBody;
+    }
+
+    /** Fetch the next entry from the cursor. */
+    override next(): Promise<proto.CursorEntry | undefined> {
+        return this.#nextItem(json_CursorEntry, protobuf_CursorEntry);
+    }
+
+    /** Close the cursor. */
+    override close(): void {
+        this._setClosed(new ClientError("Cursor was manually closed"));
+    }
+
+    /** @private */
+    _setClosed(error: Error): void {
+        if (this.#closed !== undefined) {
+            return;
+        }
+        this.#closed = error;
+        this.#stream._cursorClosed(this);
+
+        if (this.#reader !== undefined) {
+            this.#reader.cancel();
+        }
+    }
+
+    /** True if the cursor is closed. */
+    override get closed(): boolean {
+        return this.#closed !== undefined;
     }
 
     async #nextItem<T>(jsonFun: jsond.ObjectFun<T>, protobufDef: protobufd.MessageDef<T>): Promise<T | undefined> {
         for (;;) {
+            if (this.#done) {
+                return undefined;
+            } else if (this.#closed !== undefined) {
+                throw new ClosedError("Cursor is closed", this.#closed);
+            }
+
             if (this.#encoding === "json") {
                 const jsonData = this.#parseItemJson();
                 if (jsonData !== undefined) {
@@ -49,14 +102,18 @@ export class HttpCursor extends Cursor {
                 throw impossible(this.#encoding, "Impossible encoding");
             }
 
+            if (this.#reader === undefined) {
+                throw new InternalError("Attempted to read from HTTP cursor before it was opened");
+            }
+
             const {value, done} = await this.#reader.read();
             if (done && this.#queue.length === 0) {
-                this.closed = true;
-                return undefined;
+                this.#done = true;
             } else if (done) {
                 throw new ProtoError("Unexpected end of cursor stream");
+            } else {
+                this.#queue.push(value);
             }
-            this.#queue.push(value);
         }
     }
 
@@ -97,31 +154,5 @@ export class HttpCursor extends Cursor {
         const protobufData = data.slice(varintLength, varintLength + varintValue);
         this.#queue.shift(varintLength + varintValue);
         return protobufData;
-    }
-
-    static async open(
-        response: Response,
-        encoding: ProtocolEncoding,
-    ): Promise<[HttpCursor, proto.CursorRespBody]> {
-        if (response.body === null) {
-            throw new ProtoError("No response body for cursor request");
-        }
-        const cursor = new HttpCursor(response.body.getReader(), encoding);
-        const respBody = await cursor.#nextItem(json_CursorRespBody, protobuf_CursorRespBody);
-        if (respBody === undefined) {
-            throw new ProtoError("Empty response to cursor request");
-        }
-        return [cursor, respBody];
-    }
-
-    /** Fetch the next entry from the cursor. */
-    override next(): Promise<proto.CursorEntry | undefined> {
-        return this.#nextItem(json_CursorEntry, protobuf_CursorEntry);
-    }
-
-    /** Close the cursor. */
-    override close(): void {
-        this.closed = true;
-        this.#reader.cancel();
     }
 }

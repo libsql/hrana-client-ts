@@ -131,7 +131,7 @@ export class HttpClient extends Client {
         }
         this.#closed = error;
         for (const stream of Array.from(this.#streams)) {
-            stream._closeFromClient(error);
+            stream._setClosed(new ClosedError("Client was closed", error));
         }
     }
 }

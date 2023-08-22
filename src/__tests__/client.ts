@@ -463,29 +463,50 @@ describe("Stream.close()", () => {
         expect(s.closed).toStrictEqual(true);
     }));
 
-    test("close() is idempotent", withClient(async (c) => {
+    test("is idempotent", withClient(async (c) => {
         const s = c.openStream();
         await s.queryValue("SELECT 1");
         s.close();
         s.close();
     }));
 
-    test("close() does not interrupt previous operations", withClient(async (c) => {
-        const s = c.openStream();
-        const prom = s.queryValue("SELECT 1");
-        s.close();
-        expect((await prom).value).toStrictEqual(1);
-    }));
-
-    test("close() prevents further operations", withClient(async (c) => {
+    test("prevents further operations", withClient(async (c) => {
         const s = c.openStream();
         s.close();
         await expect(s.queryValue("SELECT 1")).rejects.toThrow(hrana.ClosedError);
     }));
 
-    test("close() without doing anything", withClient(async (c) => {
+    test("without doing anything", withClient(async (c) => {
         const s = c.openStream();
         s.close();
+    }));
+});
+
+describe("Stream.closeGracefully()", () => {
+    test("does not interrupt previous operations", withClient(async (c) => {
+        const s = c.openStream();
+        const prom = s.queryValue("SELECT 1");
+        s.closeGracefully();
+        expect((await prom).value).toStrictEqual(1);
+    }));
+
+    test("marks the stream as closed", withClient(async (c) => {
+        const s = c.openStream();
+        await s.queryValue("SELECT 1");
+        expect(s.closed).toStrictEqual(false);
+        s.closeGracefully();
+        expect(s.closed).toStrictEqual(true);
+    }));
+
+    test("prevents further operations", withClient(async (c) => {
+        const s = c.openStream();
+        s.closeGracefully();
+        await expect(s.queryValue("SELECT 1")).rejects.toThrow(hrana.ClosedError);
+    }));
+
+    test("without doing anything", withClient(async (c) => {
+        const s = c.openStream();
+        s.closeGracefully();
     }));
 });
 
@@ -705,6 +726,51 @@ for (const useCursor of [false, true]) {
             for (let i = 0; i < proms.length; ++i) {
                 const result = (await proms[i])!;
                 expect(result.rows.length).toStrictEqual(10*i);
+            }
+        }));
+
+        test("not interrupted by closeGracefully()", withClient(async (c) => {
+            if (useCursor) { await c.getVersion(); }
+            const s = c.openStream();
+            const batch = s.batch(useCursor);
+
+            const proms = [];
+            for (let i = 0; i < 100; ++i) {
+                proms.push(batch.step().queryValue(["SELECT 10*?", [i]]));
+            }
+            const executeProm = batch.execute();
+            s.closeGracefully();
+
+            for (let i = 0; i < proms.length; ++i) {
+                expect((await proms[i])!.value).toStrictEqual(10*i);
+            }
+            await executeProm;
+        }));
+
+        test("batches are executed sequentially", withClient(async (c) => {
+            if (useCursor) { await c.getVersion(); }
+            const s = c.openStream();
+            await s.run("DROP TABLE IF EXISTS t");
+            await s.run("CREATE TABLE t (a)");
+            await s.run("INSERT INTO t VALUES (0)");
+
+            const updateProms = [];
+            const batchProms = [];
+            for (let i = 0; i < 100; ++i) {
+                const batch = s.batch(useCursor);
+                for (let j = 0; j < 20; ++j) {
+                    updateProms.push(batch.step().queryValue(
+                        "UPDATE t SET a = a + 1 RETURNING a",
+                    ));
+                }
+                batchProms.push(batch.execute());
+            }
+
+            for (const batchProm of batchProms) {
+                await batchProm;
+            }
+            for (let k = 0; k < updateProms.length; ++k) {
+                expect((await updateProms[k])!.value).toStrictEqual(k + 1);
             }
         }));
     });

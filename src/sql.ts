@@ -9,43 +9,48 @@ export interface SqlOwner {
     storeSql(sql: string): Sql;
 
     /** @private */
-    _closeSql(sqlState: SqlState, error: Error): void;
-}
-
-export interface SqlState {
-    sqlId: number;
-    closed: Error | undefined;
+    _closeSql(sqlId: number): void;
 }
 
 /** Text of an SQL statement cached on the server. */
 export class Sql {
     #owner: SqlOwner;
-    #state: SqlState;
+    #sqlId: number;
+    #closed: Error | undefined;
 
     /** @private */
-    constructor(owner: SqlOwner, state: SqlState) {
+    constructor(owner: SqlOwner, sqlId: number) {
         this.#owner = owner;
-        this.#state = state;
+        this.#sqlId = sqlId;
+        this.#closed = undefined;
     }
 
     /** @private */
     _getSqlId(owner: SqlOwner): number {
         if (this.#owner !== owner) {
             throw new MisuseError("Attempted to use SQL text opened with other object");
-        } else if (this.#state.closed !== undefined) {
-            throw new ClosedError("SQL text is closed", this.#state.closed);
+        } else if (this.#closed !== undefined) {
+            throw new ClosedError("SQL text is closed", this.#closed);
         }
-        return this.#state.sqlId;
+        return this.#sqlId;
     }
 
     /** Remove the SQL text from the server, releasing resouces. */
     close(): void {
-        this.#owner._closeSql(this.#state, new ClientError("SQL was manually closed"));
+        this._setClosed(new ClientError("SQL text was manually closed"));
+    }
+
+    /** @private */
+    _setClosed(error: Error): void {
+        if (this.#closed === undefined) {
+            this.#closed = error;
+            this.#owner._closeSql(this.#sqlId);
+        }
     }
 
     /** True if the SQL text is closed (removed from the server). */
     get closed() {
-        return this.#state.closed !== undefined;
+        return this.#closed !== undefined;
     }
 }
 

@@ -11,12 +11,10 @@ import {
 } from "../errors.js";
 import { IdAlloc } from "../id_alloc.js";
 import { errorFromProto } from "../result.js";
-import { Sql, SqlOwner, SqlState } from "../sql.js";
+import { Sql, SqlOwner } from "../sql.js";
 import { impossible } from "../util.js";
 
-import type { CursorState } from "./cursor.js";
 import type * as proto from "./proto.js";
-import type { StreamState } from "./stream.js";
 import { WsStream } from "./stream.js";
 
 import { ClientMsg as json_ClientMsg } from "./json_encode.js";
@@ -59,10 +57,13 @@ export class WsClient extends Client implements SqlOwner {
     #responseMap: Map<number, ResponseState>;
     // An allocator of request ids.
     #requestIdAlloc: IdAlloc;
+
     // An allocator of stream ids.
-    #streamIdAlloc: IdAlloc;
+    /** @private */
+    _streamIdAlloc: IdAlloc;
     // An allocator of cursor ids.
-    #cursorIdAlloc: IdAlloc;
+    /** @private */
+    _cursorIdAlloc: IdAlloc;
     // An allocator of SQL text ids.
     #sqlIdAlloc: IdAlloc;
 
@@ -79,9 +80,10 @@ export class WsClient extends Client implements SqlOwner {
         this.#subprotocol = undefined;
         this.#getVersionCalled = false;
         this.#responseMap = new Map();
+
         this.#requestIdAlloc = new IdAlloc();
-        this.#streamIdAlloc = new IdAlloc();
-        this.#cursorIdAlloc = new IdAlloc();
+        this._streamIdAlloc = new IdAlloc();
+        this._cursorIdAlloc = new IdAlloc();
         this.#sqlIdAlloc = new IdAlloc();
 
         this.#socket.binaryType = "arraybuffer";
@@ -193,7 +195,7 @@ export class WsClient extends Client implements SqlOwner {
     // The socket encountered an error.
     #onSocketError(event: Event | WebSocket.ErrorEvent): void {
         const eventMessage = (event as {message?: string}).message;
-        const message = eventMessage ?? "Connection was closed due to an error";
+        const message = eventMessage ?? "WebSocket was closed due to an error";
         this.#setClosed(new WebSocketError(message));
     }
 
@@ -320,111 +322,7 @@ export class WsClient extends Client implements SqlOwner {
 
     /** Open a {@link WsStream}, a stream for executing SQL statements. */
     override openStream(): WsStream {
-        const streamId = this.#streamIdAlloc.alloc();
-        const streamState = {
-            streamId,
-            closed: undefined,
-            cursorState: undefined,
-        };
-
-        const responseCallback = () => undefined;
-        const errorCallback = (e: Error) => this._closeStream(streamState, e);
-
-        const request: proto.OpenStreamReq = {
-            type: "open_stream",
-            streamId,
-        };
-        this._sendRequest(request, {responseCallback, errorCallback});
-
-        return new WsStream(this, streamState);
-    }
-
-    // Make sure that the stream is closed.
-    /** @private */
-    _closeStream(streamState: StreamState, error: Error): void {
-        if (streamState.closed ?? this.#closed !== undefined) {
-            return;
-        }
-        streamState.closed = error;
-
-        const cursorState = streamState.cursorState;
-        if (cursorState !== undefined && cursorState.closed === undefined) {
-            cursorState.closed = error;
-        }
-
-        const callback = () => {
-            this.#streamIdAlloc.free(streamState.streamId);
-            if (cursorState !== undefined) {
-                this.#cursorIdAlloc.free(cursorState.cursorId);
-            }
-        };
-        const request: proto.CloseStreamReq = {
-            type: "close_stream",
-            streamId: streamState.streamId,
-        };
-        this._sendRequest(request, {responseCallback: callback, errorCallback: callback});
-    }
-
-    // Send a stream-specific request to the server and invoke a callback when we get the response.
-    /** @private */
-    _sendStreamRequest(streamState: StreamState, request: proto.Request, callbacks: ResponseCallbacks): void {
-        if (streamState.closed !== undefined) {
-            callbacks.errorCallback(new ClosedError("Stream is closed", streamState.closed));
-            return;
-        }
-        this._sendRequest(request, callbacks);
-    }
-
-    // Open a cursor for the given stream executing given batch.
-    /** @private */
-    _openCursor(streamState: StreamState, batch: proto.Batch): CursorState {
-        this._ensureVersion(3, "cursor");
-        if (streamState.cursorState !== undefined) {
-            throw new InternalError("Cannot open multiple cursors on the same stream");
-        }
-
-        const cursorId = this.#cursorIdAlloc.alloc();
-        const cursorState = {
-            cursorId,
-            done: false,
-            closed: undefined,
-        };
-
-        const responseCallback = () => undefined;
-        const errorCallback = (e: Error) => this._closeCursor(streamState, cursorState, e);
-
-        const request: proto.OpenCursorReq = {
-            type: "open_cursor",
-            streamId: streamState.streamId,
-            cursorId,
-            batch,
-        };
-        this._sendStreamRequest(streamState, request, {responseCallback, errorCallback});
-
-        streamState.cursorState = cursorState;
-        return cursorState;
-    }
-
-    // Make sure that the cursor is closed.
-    /** @private */
-    _closeCursor(streamState: StreamState, cursorState: CursorState, error: Error): void {
-        if (cursorState.closed ?? streamState.closed ?? this.#closed !== undefined) {
-            return;
-        }
-        cursorState.closed = error;
-
-        const callback = () => {
-            this.#cursorIdAlloc.free(cursorState.cursorId);
-        };
-        const request: proto.CloseCursorReq = {
-            type: "close_cursor",
-            cursorId: cursorState.cursorId,
-        };
-        this._sendRequest(request, {responseCallback: callback, errorCallback: callback});
-
-        if (streamState.cursorState === cursorState) {
-            streamState.cursorState = undefined;
-        }
+        return WsStream.open(this);
     }
 
     /** Cache a SQL text on the server. This requires protocol version 2 or higher. */
@@ -432,34 +330,26 @@ export class WsClient extends Client implements SqlOwner {
         this._ensureVersion(2, "storeSql()");
 
         const sqlId = this.#sqlIdAlloc.alloc();
-        const sqlState = {
-            sqlId,
-            closed: undefined,
-        };
-
+        const sqlObj = new Sql(this, sqlId);
 
         const responseCallback = () => undefined;
-        const errorCallback = (e: Error) => this._closeSql(sqlState, e);
+        const errorCallback = (e: Error) => sqlObj._setClosed(e);
 
         const request: proto.StoreSqlReq = {type: "store_sql", sqlId, sql};
         this._sendRequest(request, {responseCallback, errorCallback});
-
-        return new Sql(this, sqlState);
+        return sqlObj;
     }
 
-    // Make sure that the SQL text is closed.
     /** @private */
-    _closeSql(sqlState: SqlState, error: Error): void {
-        if (sqlState.closed !== undefined || this.#closed !== undefined) {
+    _closeSql(sqlId: number): void {
+        if (this.#closed !== undefined) {
             return;
         }
-        sqlState.closed = error;
 
-        const callback = () => {
-            this.#sqlIdAlloc.free(sqlState.sqlId);
-        };
-        const request: proto.CloseSqlReq = {type: "close_sql", sqlId: sqlState.sqlId};
-        this._sendRequest(request, {responseCallback: callback, errorCallback: callback});
+        const responseCallback = () => this.#sqlIdAlloc.free(sqlId);
+        const errorCallback = (e: Error) => this.#setClosed(e);
+        const request: proto.CloseSqlReq = {type: "close_sql", sqlId};
+        this._sendRequest(request, {responseCallback, errorCallback});
     }
 
     /** Close the client and the WebSocket. */

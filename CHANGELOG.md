@@ -7,6 +7,8 @@
     - Added `BatchCond.isAutocommit()`
     - Added `Stream.getAutocommit()`
     - Added parameter `useCursor` to `Stream.batch()`
+- **Changed meaning of `Stream.close()`**, which now closes the stream immediately
+    - Added `Stream.closeGracefully()`
 - Changed type of `StmtResult.lastInsertRowid` to bigint
 - Changed `BatchCond.and()` and `BatchCond.or()` to pass the `Batch` object
 - Added `Stream.client()`
