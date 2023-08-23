@@ -113,9 +113,14 @@ export class WsClient extends Client implements SqlOwner {
     // The socket transitioned from CONNECTING to OPEN
     #onSocketOpen(): void {
         const protocol = this.#socket.protocol;
-        if (protocol === "" || protocol === undefined) {
-            // TODO: `protocol === undefined` is a workaround for Miniflare 2, which does not support the
-            // `protocol` property on a WebSocket
+        if (protocol === undefined) {
+            this.#setClosed(new ClientError(
+                "The `WebSocket.protocol` property is undefined. This most likely means that the WebSocket " +
+                    "implementation provided by the environment is broken. If you are using Miniflare 2, " +
+                    "please update to Miniflare 3, which fixes this problem."
+            ));
+            return;
+        } else if (protocol === "") {
             this.#subprotocol = {version: 1, encoding: "json"};
         } else {
             this.#subprotocol = subprotocols.get(protocol);

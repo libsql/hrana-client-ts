@@ -15,6 +15,7 @@
 - Added `MisuseError` and `InternalError`
 - Added reexport of `WebSocket` from `@libsql/isomorphic-ws`
 - Added reexports of `fetch`, `Request`, `Response` and other types from `@libsql/isomorphic-fetch`
+- Dropped workarounds for broken WebSocket support in Miniflare 2
 
 ## 0.4.4 -- 2023-08-15
 
