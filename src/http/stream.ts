@@ -59,6 +59,7 @@ export class HttpStream extends Stream implements SqlOwner {
     #flushing: boolean;
     #cursor: HttpCursor | undefined;
     #closing: boolean;
+    #closeQueued: boolean;
     #closed: Error | undefined;
 
     #sqlIdAlloc: IdAlloc;
@@ -75,6 +76,7 @@ export class HttpStream extends Stream implements SqlOwner {
         this.#queue = new Queue();
         this.#flushing = false;
         this.#closing = false;
+        this.#closeQueued = false;
         this.#closed = undefined;
 
         this.#sqlIdAlloc = new IdAlloc();
@@ -219,13 +221,14 @@ export class HttpStream extends Stream implements SqlOwner {
             }
         }
 
-        if (this.#baton !== undefined || this.#flushing) {
+        if ((this.#baton !== undefined || this.#flushing) && !this.#closeQueued) {
             this.#queue.push({
                 type: "pipeline",
                 request: {type: "close"},
-                responseCallback() {},
-                errorCallback() {},
+                responseCallback: () => undefined,
+                errorCallback: () => undefined,
             });
+            this.#closeQueued = true;
             queueMicrotask(() => this.#flushQueue());
         }
     }
@@ -270,6 +273,15 @@ export class HttpStream extends Stream implements SqlOwner {
                 if (entry !== undefined && entry.type === "pipeline") {
                     pipeline.push(entry);
                     this.#queue.shift();
+                } else if (entry === undefined && this.#closing && !this.#closeQueued) {
+                    pipeline.push({
+                        type: "pipeline",
+                        request: {type: "close"},
+                        responseCallback: () => undefined,
+                        errorCallback: () => undefined,
+                    });
+                    this.#closeQueued = true;
+                    break;
                 } else {
                     break;
                 }
