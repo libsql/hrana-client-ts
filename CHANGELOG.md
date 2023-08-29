@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.0 -- 2023-07-29
+
 - **Added support for Hrana 3**, which included some API changes:
     - Added variant `3` to the `ProtocolVersion` type
     - Added `BatchCond.isAutocommit()`
