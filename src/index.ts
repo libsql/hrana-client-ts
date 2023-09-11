@@ -1,10 +1,11 @@
 import { WebSocket } from "@libsql/isomorphic-ws";
 
-import { subprotocols } from "./ws/client.js";
+import { subprotocolsV2, subprotocolsV3 } from "./ws/client.js";
 import { WebSocketUnsupportedError } from "./errors.js";
 
 import { HttpClient } from "./http/client.js";
 import { WsClient } from "./ws/client.js";
+import { ProtocolVersion } from "./client.js";
 
 export { WebSocket } from "@libsql/isomorphic-ws";
 export type { RequestInit, Response } from "@libsql/isomorphic-fetch";
@@ -31,11 +32,17 @@ export { WsClient } from "./ws/client.js";
 export { WsStream } from "./ws/stream.js";
 
 /** Open a Hrana client over WebSocket connected to the given `url`. */
-export function openWs(url: string | URL, jwt?: string): WsClient {
+export function openWs(url: string | URL, jwt?: string, protocolVersion: ProtocolVersion = 2): WsClient {
     if (typeof WebSocket === "undefined") {
         throw new WebSocketUnsupportedError("WebSockets are not supported in this environment");
     }
-    const socket = new WebSocket(url, Array.from(subprotocols.keys()));
+    var subprotocols = undefined;
+    if (protocolVersion == 3) {
+        subprotocols = Array.from(subprotocolsV3.keys());
+    } else {
+        subprotocols = Array.from(subprotocolsV2.keys());
+    }
+    const socket = new WebSocket(url, subprotocols);
     return new WsClient(socket, jwt);
 }
 
@@ -45,6 +52,6 @@ export function openWs(url: string | URL, jwt?: string): WsClient {
  * from `@libsql/isomorphic-fetch`. This function is always called with a `Request` object from
  * `@libsql/isomorphic-fetch`.
  */
-export function openHttp(url: string | URL, jwt?: string, customFetch?: unknown | undefined): HttpClient {
-    return new HttpClient(url instanceof URL ? url : new URL(url), jwt, customFetch);
+export function openHttp(url: string | URL, jwt?: string, customFetch?: unknown | undefined, protocolVersion: ProtocolVersion = 2): HttpClient {
+    return new HttpClient(url instanceof URL ? url : new URL(url), jwt, customFetch, protocolVersion);
 }

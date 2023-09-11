@@ -57,7 +57,7 @@ export class HttpClient extends Client {
     _endpoint: Endpoint | undefined;
 
     /** @private */
-    constructor(url: URL, jwt: string | undefined, customFetch: unknown | undefined) {
+    constructor(url: URL, jwt: string | undefined, customFetch: unknown | undefined, protocolVersion: ProtocolVersion = 2) {
         super();
         this.#url = url;
         this.#jwt = jwt;
@@ -66,11 +66,19 @@ export class HttpClient extends Client {
         this.#closed = undefined;
         this.#streams = new Set();
 
-        this._endpointPromise = findEndpoint(this.#fetch, this.#url);
-        this._endpointPromise.then(
-            (endpoint) => this._endpoint = endpoint,
-            (error) => this.#setClosed(error),
-        );
+        if (protocolVersion == 3) {
+            this._endpointPromise = findEndpoint(this.#fetch, this.#url);
+            this._endpointPromise.then(
+                (endpoint) => this._endpoint = endpoint,
+                (error) => this.#setClosed(error),
+            );
+        } else {
+            this._endpointPromise = Promise.resolve(fallbackEndpoint);
+            this._endpointPromise.then(
+                (endpoint) => this._endpoint = endpoint,
+                (error) => this.#setClosed(error),
+            );
+        }
     }
 
     /** Get the protocol version supported by the server. */

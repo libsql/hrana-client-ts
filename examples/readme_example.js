@@ -5,9 +5,9 @@ import * as hrana from "@libsql/hrana-client";
 const url = process.env.URL ?? "ws://localhost:8080"; // Address of the sqld server
 const jwt = process.env.JWT; // JWT token for authentication
 // Here we are using Hrana over WebSockets:
-const client = hrana.openWs(url, jwt);
+const client = hrana.openWs(url, jwt, 3);
 // But we can also use Hrana over HTTP:
-// const client = hrana.openHttp(url, jwt);
+// const client = hrana.openHttp(url, jwt, undefined, 3);
 
 // Open a `hrana.Stream`, which is an interactive SQL stream. This corresponds
 // to a "connection" from other SQL databases
