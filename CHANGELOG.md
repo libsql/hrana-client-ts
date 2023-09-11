@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2 -- 2023-09-11
+
+- Switch to use Hrana 2 by default to let Hrana 3 cook a bit longer.
+
 ## 0.5.1 -- 2023-09-11
 
 - Update `isomorphic-{fetch, ws}` dependencies for Bun support.
