@@ -1,6 +1,6 @@
 {
   "name": "@libsql/hrana-client",
-  "version": "0.5.1-pre",
+  "version": "0.5.1",
   "keywords": [
     "hrana",
     "libsql",
@@ -17,7 +17,6 @@
     "Jan Špaček <honza@chiselstrike.com>"
   ],
   "license": "MIT",
-
   "type": "module",
   "main": "lib-cjs/index.js",
   "types": "lib-esm/index.d.ts",
@@ -32,7 +31,6 @@
     "lib-cjs/**",
     "lib-esm/**"
   ],
-
   "scripts": {
     "clean": "rm -rf ./lib-cjs ./lib-esm ./*.tsbuildinfo",
     "prepublishOnly": "npm run clean-build",
@@ -42,12 +40,10 @@
     "build:esm": "tsc -p tsconfig.build-esm.json",
     "postbuild": "cp package-cjs.json ./lib-cjs/package.json",
     "clean-build": "npm run clean && npm run build",
-
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand",
     "typedoc": "rm -rf ./docs && typedoc"
   },
-
   "dependencies": {
     "@libsql/isomorphic-ws": "^0.1.5",
     "@libsql/isomorphic-fetch": "^0.1.7",

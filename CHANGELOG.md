@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 -- 2023-09-11
+
+- Update `isomorphic-{fetch, ws}` dependencies for Bun support.
 
 ## 0.5.0 -- 2023-07-29
 
