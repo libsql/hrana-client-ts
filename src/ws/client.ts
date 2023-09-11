@@ -27,7 +27,12 @@ export type Subprotocol = {
     encoding: ProtocolEncoding,
 };
 
-export const subprotocols: Map<string, Subprotocol> = new Map([
+export const subprotocolsV2: Map<string, Subprotocol> = new Map([
+    ["hrana2", {version: 2, encoding: "json"}],
+    ["hrana1", {version: 1, encoding: "json"}],
+]);
+
+export const subprotocolsV3: Map<string, Subprotocol> = new Map([
     ["hrana3-protobuf", {version: 3, encoding: "protobuf"}],
     ["hrana3", {version: 3, encoding: "json"}],
     ["hrana2", {version: 2, encoding: "json"}],
@@ -123,7 +128,7 @@ export class WsClient extends Client implements SqlOwner {
         } else if (protocol === "") {
             this.#subprotocol = {version: 1, encoding: "json"};
         } else {
-            this.#subprotocol = subprotocols.get(protocol);
+            this.#subprotocol = subprotocolsV3.get(protocol);
             if (this.#subprotocol === undefined) {
                 this.#setClosed(new ProtoError(
                     `Unrecognized WebSocket subprotocol: ${JSON.stringify(protocol)}`,
