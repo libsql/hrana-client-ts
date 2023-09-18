@@ -46,7 +46,7 @@
   },
   "dependencies": {
     "@libsql/isomorphic-ws": "^0.1.5",
-    "@libsql/isomorphic-fetch": "^0.1.7",
+    "@libsql/isomorphic-fetch": "^0.1.8",
     "js-base64": "^3.7.5"
   },
   "devDependencies": {
