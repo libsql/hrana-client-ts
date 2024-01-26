@@ -45,7 +45,7 @@
     "typedoc": "rm -rf ./docs && typedoc"
   },
   "dependencies": {
-    "@libsql/isomorphic-fetch": "^0.1.10",
+    "@libsql/isomorphic-fetch": "^0.1.12",
     "@libsql/isomorphic-ws": "^0.1.5",
     "js-base64": "^3.7.5",
     "node-fetch": "^3.3.2"
