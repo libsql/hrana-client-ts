@@ -473,9 +473,5 @@ async function errorFromResponse(resp: Response): Promise<Error> {
         }
     }
 
-    if (resp.status === 404) {
-        message += ". It seems that the libsql server is outdated, please try updating the database.";
-    }
-
     return new HttpServerError(message, resp.status);
 }
