@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 -- 2024-03-28
 
 - Update `isomorphic-fetch` dependency for built-in Node fetch(). This package now requires Node 18 or later.
 
