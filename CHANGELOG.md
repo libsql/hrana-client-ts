@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Update `isomorphic-fetch` dependency for built-in Node fetch(). This package now requires Node 18 or later.
+
 ## 0.5.2 -- 2023-09-11
 
 - Switch to use Hrana 2 by default to let Hrana 3 cook a bit longer.

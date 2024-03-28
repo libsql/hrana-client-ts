@@ -1,5 +1,4 @@
-import type { Response } from "@libsql/isomorphic-fetch";
-import { fetch, Request, Headers } from "@libsql/isomorphic-fetch";
+import { fetch, Request } from "@libsql/isomorphic-fetch";
 
 import type { ProtocolVersion, ProtocolEncoding } from "../client.js";
 import { Client } from "../client.js";
