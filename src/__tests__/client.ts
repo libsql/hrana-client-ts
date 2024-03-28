@@ -1,4 +1,5 @@
-import { fetch, Request, Response } from "@libsql/isomorphic-fetch";
+import type { Response } from "@libsql/isomorphic-fetch";
+import { fetch, Request } from "@libsql/isomorphic-fetch";
 
 import * as hrana from "..";
 
