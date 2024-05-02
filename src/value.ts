@@ -74,7 +74,7 @@ export function valueFromProto(value: proto.Value, intMode: IntMode, colDecltype
     } else if (typeof value === "string") {
         return value;
     } else if (typeof value === "bigint") {
-        if (castBooleans && colDecltype === 'boolean') {
+        if (castBooleans && colDecltype?.toLowerCase() === 'boolean') {
             return Boolean(value);
         }
         if (intMode === "number") {
