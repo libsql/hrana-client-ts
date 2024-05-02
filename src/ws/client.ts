@@ -1,6 +1,6 @@
 import { WebSocket } from "@libsql/isomorphic-ws";
 
-import type { ProtocolVersion, ProtocolEncoding } from "../client.js";
+import type { ProtocolVersion, ProtocolEncoding, ClientConfig } from "../client.js";
 import { Client } from "../client.js";
 import {
     readJsonObject, writeJsonObject, readProtobufMessage, writeProtobufMessage,
@@ -73,8 +73,8 @@ export class WsClient extends Client implements SqlOwner {
     #sqlIdAlloc: IdAlloc;
 
     /** @private */
-    constructor(socket: WebSocket, jwt: string | undefined) {
-        super();
+    constructor(socket: WebSocket, jwt: string | undefined, config: ClientConfig) {
+        super(config);
 
         this.#socket = socket;
         this.#openCallbacks = [];
@@ -268,7 +268,7 @@ export class WsClient extends Client implements SqlOwner {
             } else {
                 throw impossible(encoding, "Impossible encoding");
             }
-            
+
             this.#handleMsg(msg);
         } catch (e) {
             this.#socket.close(3007, "Could not handle message");
