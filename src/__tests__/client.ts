@@ -19,13 +19,13 @@ checkEndpoints.push({
     encoding: "json",
 });
 
-function withClient(f: (c: hrana.Client) => Promise<void>): () => Promise<void> {
+function withClient(f: (c: hrana.Client) => Promise<void>, config?: hrana.ClientConfig): () => Promise<void> {
     return async () => {
         let client: hrana.Client;
         if (isWs) {
-            client = hrana.openWs(url, jwt, 3);
+            client = hrana.openWs(url, jwt, 3, config);
         } else if (isHttp) {
-            client = hrana.openHttp(url, jwt, undefined, 3);
+            client = hrana.openHttp(url, jwt, undefined, 3, config);
         } else {
             throw new Error("expected either ws or http URL");
         }
@@ -82,7 +82,7 @@ test("Stream.queryValue() without value", withClient(async (c) => {
 
 test("Stream.queryRow() with row", withClient(async (c) => {
     const s = c.openStream();
-    
+
     const res = await s.queryRow(
         "SELECT 1 AS one, 'elephant' AS two, 42.5 AS three, NULL as four");
     expect(res.columnNames).toStrictEqual(["one", "two", "three", "four"]);
@@ -102,7 +102,7 @@ test("Stream.queryRow() with row", withClient(async (c) => {
 
 test("Stream.queryRow() without row", withClient(async (c) => {
     const s = c.openStream();
-    
+
     const res = await s.queryValue("SELECT 1 AS one WHERE 0 = 1");
     expect(res.value).toStrictEqual(undefined);
     expect(res.columnNames).toStrictEqual(["one"]);
@@ -315,6 +315,63 @@ describe("returned integers", () => {
             const res = await s.queryValue("SELECT 9007199254740992");
             await expect(res.value).toStrictEqual("9007199254740992");
         }));
+    });
+});
+
+describe("returned booleans", () => {
+    const columnName = 'isActive';
+    describe("booleans are JS integers", () => {
+        test('without config', withClient(async (c) => {
+            const s = c.openStream();
+            await s.run("BEGIN");
+            await s.run("DROP TABLE IF EXISTS t");
+            await s.run(`CREATE TABLE t (id INTEGER PRIMARY KEY, ${columnName} BOOLEAN)`);
+            await s.run("INSERT INTO t VALUES (1, true)");
+            await s.run("INSERT INTO t VALUES (2, false)");
+            await s.run("COMMIT");
+
+            const resTrue = await s.queryRow(`SELECT ${columnName} FROM t WHERE id = 1`);
+            const valTrue = resTrue.row?.[columnName];
+            expect(typeof valTrue).toStrictEqual("number");
+            expect(valTrue).toStrictEqual(1);
+
+            const resFalse = await s.queryRow(`SELECT ${columnName} FROM t WHERE id = 2`);
+            const valFalse = resFalse.row?.[columnName];
+            expect(typeof valFalse).toStrictEqual("number");
+            expect(valFalse).toStrictEqual(0);
+        }));
+
+        test('with config', withClient(async (c) => {
+            const s = c.openStream();
+            const resTrue = await s.queryRow(`SELECT ${columnName} FROM t WHERE id = 1`);
+            const valTrue = resTrue.row?.[columnName];
+            expect(typeof valTrue).toStrictEqual("number");
+            expect(valTrue).toStrictEqual(1);
+
+            const resFalse = await s.queryRow(`SELECT ${columnName} FROM t WHERE id = 2`);
+            const valFalse = resFalse.row?.[columnName];
+            expect(typeof valFalse).toStrictEqual("number");
+            expect(valFalse).toStrictEqual(0);
+        }, { castBooleans: false }));
+    });
+
+    describe("booleans are JS booleans", () => {
+        test('with config', withClient(async (c) => {
+            const s = c.openStream();
+            const resTrue = await s.queryRow(`SELECT ${columnName} FROM t WHERE id = 1`);
+            const valTrue = resTrue.row?.[columnName];
+            expect(typeof valTrue).toStrictEqual("boolean");
+            expect(valTrue).toStrictEqual(true);
+
+            const resFalse = await s.queryRow(`SELECT ${columnName} FROM t WHERE id = 2`);
+            const valFalse = resFalse.row?.[columnName];
+            expect(typeof valFalse).toStrictEqual("boolean");
+            expect(valFalse).toStrictEqual(false);
+
+            await s.run("BEGIN");
+            await s.run("DROP TABLE t");
+            await s.run("COMMIT");
+        }, { castBooleans: true }));
     });
 });
 
@@ -539,7 +596,7 @@ for (const useCursor of [false, true]) {
         test("failing statement", withClient(async (c) => {
             if (useCursor) { await c.getVersion(); }
             const s = c.openStream();
-            
+
             const batch = s.batch(useCursor);
             const prom1 = batch.step().queryValue("SELECT 1");
             const prom2 = batch.step().queryValue("SELECT foobar");
@@ -904,7 +961,7 @@ for (const useCursor of [false, true]) {
     for (const useCursor of [false, true]) {
         (version >= 3 || !useCursor ? test : test.skip)(
             useCursor ? "batch w/ cursor" : "batch w/o cursor",
-            withSqlOwner(async (s, owner) => 
+            withSqlOwner(async (s, owner) =>
         {
             const sql1 = owner.storeSql("SELECT 11");
             const sql2 = owner.storeSql("SELECT 'one', 'two'");

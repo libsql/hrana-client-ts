@@ -1,3 +1,4 @@
+import { ClientConfig } from "./client.js";
 import { ClientError, ProtoError, ResponseError } from "./errors.js";
 import type * as proto from "./shared/proto.js";
 import type { Value, IntMode } from "./value.js";
@@ -52,17 +53,17 @@ export function stmtResultFromProto(result: proto.StmtResult): StmtResult {
     };
 }
 
-export function rowsResultFromProto(result: proto.StmtResult, intMode: IntMode): RowsResult {
+export function rowsResultFromProto(result: proto.StmtResult, intMode: IntMode, config: ClientConfig): RowsResult {
     const stmtResult = stmtResultFromProto(result);
-    const rows = result.rows.map(row => rowFromProto(stmtResult.columnNames, row, intMode));
+    const rows = result.rows.map(row => rowFromProto(stmtResult.columnNames, row, intMode, stmtResult.columnDecltypes, config));
     return {...stmtResult, rows};
 }
 
-export function rowResultFromProto(result: proto.StmtResult, intMode: IntMode): RowResult {
+export function rowResultFromProto(result: proto.StmtResult, intMode: IntMode, config: ClientConfig): RowResult {
     const stmtResult = stmtResultFromProto(result);
     let row: Row | undefined;
     if (result.rows.length > 0) {
-        row = rowFromProto(stmtResult.columnNames, result.rows[0], intMode);
+        row = rowFromProto(stmtResult.columnNames, result.rows[0], intMode, stmtResult.columnDecltypes, config);
     }
     return {...stmtResult, row};
 }
@@ -71,6 +72,7 @@ export function valueResultFromProto(result: proto.StmtResult, intMode: IntMode)
     const stmtResult = stmtResultFromProto(result);
     let value: Value | undefined;
     if (result.rows.length > 0 && stmtResult.columnNames.length > 0) {
+        // TODO: How do we solve this? AFAICS we don't have column data when fetching a single value, so we don't know when to cast ints to booleans
         value = valueFromProto(result.rows[0][0], intMode);
     }
     return {...stmtResult, value};
@@ -80,12 +82,14 @@ function rowFromProto(
     colNames: Array<string | undefined>,
     values: Array<proto.Value>,
     intMode: IntMode,
+    colDecltypes: Array<string | undefined>,
+    config: ClientConfig
 ): Row {
     const row = {};
     // make sure that the "length" property is not enumerable
     Object.defineProperty(row, "length", { value: values.length });
     for (let i = 0; i < values.length; ++i) {
-        const value = valueFromProto(values[i], intMode);
+        const value = valueFromProto(values[i], intMode, colDecltypes[i], config.castBooleans);
         Object.defineProperty(row, i, { value });
 
         const colName = colNames[i];

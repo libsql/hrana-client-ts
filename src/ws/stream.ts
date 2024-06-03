@@ -47,7 +47,7 @@ export class WsStream extends Stream {
 
     /** @private */
     constructor(client: WsClient, streamId: number) {
-        super(client.intMode);
+        super(client.intMode, client.config);
         this.#client = client;
         this.#streamId = streamId;
 

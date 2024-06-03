@@ -3,11 +3,15 @@ import type { IntMode } from "./value.js";
 
 export type ProtocolVersion = 1 | 2 | 3;
 export type ProtocolEncoding = "json" | "protobuf";
+export type ClientConfig = {
+    castBooleans?: boolean;
+};
 
 /** A client for the Hrana protocol (a "database connection pool"). */
 export abstract class Client {
     /** @private */
-    constructor() {
+    constructor(config: ClientConfig) {
+        this.config = config;
         this.intMode = "number";
     }
 
@@ -36,4 +40,7 @@ export abstract class Client {
      * override the integer mode for every stream by setting {@link Stream.intMode} on the stream.
      */
     intMode: IntMode;
+
+    /** Stores the client configuration. See {@link ClientConfig}. */
+    config: ClientConfig;
 }

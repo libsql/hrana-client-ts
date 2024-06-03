@@ -66,7 +66,7 @@ export class HttpStream extends Stream implements SqlOwner {
 
     /** @private */
     constructor(client: HttpClient, baseUrl: URL, jwt: string | undefined, customFetch: typeof fetch) {
-        super(client.intMode);
+        super(client.intMode, client.config);
         this.#client = client;
         this.#baseUrl = baseUrl.toString();
         this.#jwt = jwt;

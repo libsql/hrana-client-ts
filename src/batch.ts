@@ -1,5 +1,5 @@
+import { ClientConfig } from "./client.js";
 import { ProtoError, MisuseError } from "./errors.js";
-import { IdAlloc } from "./id_alloc.js";
 import type { RowsResult, RowResult, ValueResult, StmtResult } from "./result.js";
 import {
     stmtResultFromProto, rowsResultFromProto,
@@ -11,8 +11,7 @@ import type { InStmt } from "./stmt.js";
 import { stmtToProto } from "./stmt.js";
 import { Stream } from "./stream.js";
 import { impossible } from "./util.js";
-import type { Value, InValue, IntMode } from "./value.js";
-import { valueToProto, valueFromProto } from "./value.js";
+import type { IntMode } from "./value.js";
 
 /** A builder for creating a batch and executing it on the server. */
 export class Batch {
@@ -205,7 +204,7 @@ export class BatchStep {
     #add<T>(
         inStmt: InStmt,
         wantRows: boolean,
-        fromProto: (result: proto.StmtResult, intMode: IntMode) => T,
+        fromProto: (result: proto.StmtResult, intMode: IntMode, config: ClientConfig) => T,
     ): Promise<T | undefined> {
         if (this._index !== undefined) {
             throw new MisuseError("This BatchStep has already been added to the batch");
@@ -234,7 +233,7 @@ export class BatchStep {
                 } else if (stepError !== undefined) {
                     errorCallback(errorFromProto(stepError));
                 } else if (stepResult !== undefined) {
-                    outputCallback(fromProto(stepResult, this._batch._stream.intMode));
+                    outputCallback(fromProto(stepResult, this._batch._stream.intMode, this._batch._stream.config));
                 } else {
                     outputCallback(undefined);
                 }
@@ -282,7 +281,7 @@ export class BatchCond {
         return new BatchCond(cond._batch, {type: "not", cond: cond._proto});
     }
 
-    /** Create a condition that is a logical AND of other conditions. 
+    /** Create a condition that is a logical AND of other conditions.
      */
     static and(batch: Batch, conds: Array<BatchCond>): BatchCond {
         for (const cond of conds) {
@@ -291,7 +290,7 @@ export class BatchCond {
         return new BatchCond(batch, {type: "and", conds: conds.map(e => e._proto)});
     }
 
-    /** Create a condition that is a logical OR of other conditions. 
+    /** Create a condition that is a logical OR of other conditions.
      */
     static or(batch: Batch, conds: Array<BatchCond>): BatchCond {
         for (const cond of conds) {
