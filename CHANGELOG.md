@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.2 -- 2024-06-03
+
+- Make row properties writable to match the behavior of the SQLite client.
+
 ## 0.6.1 -- 2024-06-03
 
 - Remove confusing 404 error message.
