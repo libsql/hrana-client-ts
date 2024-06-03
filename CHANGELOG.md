@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1 -- 2024-06-03
+
+- Remove confusing 404 error message.
+
 ## 0.6.0 -- 2024-03-28
 
 - Update `isomorphic-fetch` dependency for built-in Node fetch(). This package now requires Node 18 or later.
