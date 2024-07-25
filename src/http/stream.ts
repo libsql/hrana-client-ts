@@ -31,6 +31,7 @@ import { CursorReqBody as json_CursorReqBody } from "./json_encode.js";
 import { CursorReqBody as protobuf_CursorReqBody } from "./protobuf_encode.js";
 import { PipelineRespBody as json_PipelineRespBody } from "./json_decode.js";
 import { PipelineRespBody as protobuf_PipelineRespBody } from "./protobuf_decode.js";
+import { Error as protobuf_Error } from "../shared/protobuf_decode.js";
 
 type QueueEntry = PipelineEntry | CursorEntry;
 
@@ -457,6 +458,7 @@ async function decodePipelineResponse(
 }
 
 async function errorFromResponse(resp: Response): Promise<Error> {
+    console.log(resp.headers.get("content-type"));
     const respType = resp.headers.get("content-type") ?? "text/plain";
     if (respType === "application/json") {
         const respBody = await resp.json();
@@ -471,6 +473,12 @@ async function errorFromResponse(resp: Response): Promise<Error> {
         if (respBody !== "") {
             message += `: ${respBody}`;
         }
+    }
+
+    if (respType === "application/x-protobuf") {
+        const respData = await resp.arrayBuffer();
+        let msg = readProtobufMessage(new Uint8Array(respData), protobuf_Error);
+        message += `: ${msg.message} (${msg.code})`
     }
 
     return new HttpServerError(message, resp.status);
