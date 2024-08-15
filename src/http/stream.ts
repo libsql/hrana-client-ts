@@ -448,30 +448,37 @@ async function decodePipelineResponse(
     if (encoding === "json") {
         const respJson = await resp.json();
         return readJsonObject(respJson, json_PipelineRespBody);
-    } else if (encoding === "protobuf") {
+    }
+
+    if (encoding === "protobuf") {
         const respData = await resp.arrayBuffer();
         return readProtobufMessage(new Uint8Array(respData), protobuf_PipelineRespBody);
-    } else {
-        throw impossible(encoding, "Impossible encoding");
     }
+
+    await resp.body?.cancel();
+    throw impossible(encoding, "Impossible encoding");
 }
 
 async function errorFromResponse(resp: Response): Promise<Error> {
     const respType = resp.headers.get("content-type") ?? "text/plain";
+    let message = `Server returned HTTP status ${resp.status}`;
+
     if (respType === "application/json") {
         const respBody = await resp.json();
         if ("message" in respBody) {
             return errorFromProto(respBody as proto.Error);
         }
+        return new HttpServerError(message, resp.status);
     }
 
-    let message = `Server returned HTTP status ${resp.status}`;
     if (respType === "text/plain") {
         const respBody = (await resp.text()).trim();
         if (respBody !== "") {
             message += `: ${respBody}`;
         }
+        return new HttpServerError(message, resp.status);
     }
 
+    await resp.body?.cancel();
     return new HttpServerError(message, resp.status);
 }
