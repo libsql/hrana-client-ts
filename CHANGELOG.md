@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.3 -- 2024-08-25
+
+- Make sure fetch response body is read or cancelled during flush, which fixes random networking errors observed by users.
+
 ## 0.6.2 -- 2024-06-03
 
 - Make row properties writable to match the behavior of the SQLite client.
