@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0 -- 2024-09-16
+
+- Upgrade isomorphic-fetch to v0.3.0 which do not override `fetch` agent and do not have issue with headers in cloud providers (see https://github.com/libsql/isomorphic-ts/pull/17)
+
 ## 0.6.3 -- 2024-08-25
 
 - Make sure fetch response body is read or cancelled during flush, which fixes random networking errors observed by users.
