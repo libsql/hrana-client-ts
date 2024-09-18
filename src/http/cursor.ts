@@ -1,4 +1,4 @@
-import type { Response, ReadableStreamDefaultReader } from "@libsql/isomorphic-fetch";
+import type { Response } from "cross-fetch";
 
 import { ByteQueue } from "../byte_queue.js";
 import type { ProtocolEncoding } from "../client.js";
@@ -79,7 +79,7 @@ export class HttpCursor extends Cursor {
     }
 
     async #nextItem<T>(jsonFun: jsond.ObjectFun<T>, protobufDef: protobufd.MessageDef<T>): Promise<T | undefined> {
-        for (;;) {
+        for (; ;) {
             if (this.#done) {
                 return undefined;
             } else if (this.#closed !== undefined) {
@@ -106,7 +106,7 @@ export class HttpCursor extends Cursor {
                 throw new InternalError("Attempted to read from HTTP cursor before it was opened");
             }
 
-            const {value, done} = await this.#reader.read();
+            const { value, done } = await this.#reader.read();
             if (done && this.#queue.length === 0) {
                 this.#done = true;
             } else if (done) {
@@ -135,12 +135,12 @@ export class HttpCursor extends Cursor {
 
         let varintValue = 0;
         let varintLength = 0;
-        for (;;) {
+        for (; ;) {
             if (varintLength >= data.byteLength) {
                 return undefined;
             }
             const byte = data[varintLength];
-            varintValue |= (byte & 0x7f) << (7*varintLength);
+            varintValue |= (byte & 0x7f) << (7 * varintLength);
             varintLength += 1;
             if (!(byte & 0x80)) {
                 break;
