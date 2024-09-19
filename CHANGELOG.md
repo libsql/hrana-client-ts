@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.0 -- 2024-09-16
+
+- Replace isomorphic-fetch dependency with cross-fetch
+
 ## 0.7.0 -- 2024-09-16
 
 - Upgrade isomorphic-fetch to v0.3.0 which do not override `fetch` agent and do not have issue with headers in cloud providers (see https://github.com/libsql/isomorphic-ts/pull/17)
