@@ -1,4 +1,4 @@
-import type { Response, ReadableStreamDefaultReader } from "@libsql/isomorphic-fetch";
+import type { Response } from "cross-fetch";
 
 import { ByteQueue } from "../byte_queue.js";
 import type { ProtocolEncoding } from "../client.js";
@@ -20,7 +20,7 @@ export class HttpCursor extends Cursor {
     #stream: HttpStream;
     #encoding: ProtocolEncoding;
 
-    #reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    #reader: any | undefined;
     #queue: ByteQueue;
     #closed: Error | undefined;
     #done: boolean;
@@ -42,7 +42,10 @@ export class HttpCursor extends Cursor {
             throw new ProtoError("No response body for cursor request");
         }
 
-        this.#reader = response.body.getReader();
+        // node-fetch do not fully support WebStream API, especially getReader() function
+        // see https://github.com/node-fetch/node-fetch/issues/387
+        // so, we are using async iterator which behaves similarly here instead
+        this.#reader = (response.body as any)[Symbol.asyncIterator]();
         const respBody = await this.#nextItem(json_CursorRespBody, protobuf_CursorRespBody);
         if (respBody === undefined) {
             throw new ProtoError("Empty response to cursor request");
@@ -69,7 +72,7 @@ export class HttpCursor extends Cursor {
         this.#stream._cursorClosed(this);
 
         if (this.#reader !== undefined) {
-            this.#reader.cancel();
+            this.#reader.return();
         }
     }
 
@@ -79,7 +82,7 @@ export class HttpCursor extends Cursor {
     }
 
     async #nextItem<T>(jsonFun: jsond.ObjectFun<T>, protobufDef: protobufd.MessageDef<T>): Promise<T | undefined> {
-        for (;;) {
+        for (; ;) {
             if (this.#done) {
                 return undefined;
             } else if (this.#closed !== undefined) {
@@ -106,7 +109,7 @@ export class HttpCursor extends Cursor {
                 throw new InternalError("Attempted to read from HTTP cursor before it was opened");
             }
 
-            const {value, done} = await this.#reader.read();
+            const { value, done } = await this.#reader.next();
             if (done && this.#queue.length === 0) {
                 this.#done = true;
             } else if (done) {
@@ -135,12 +138,12 @@ export class HttpCursor extends Cursor {
 
         let varintValue = 0;
         let varintLength = 0;
-        for (;;) {
+        for (; ;) {
             if (varintLength >= data.byteLength) {
                 return undefined;
             }
             const byte = data[varintLength];
-            varintValue |= (byte & 0x7f) << (7*varintLength);
+            varintValue |= (byte & 0x7f) << (7 * varintLength);
             varintLength += 1;
             if (!(byte & 0x80)) {
                 break;
