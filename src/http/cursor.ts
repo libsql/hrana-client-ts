@@ -18,7 +18,7 @@ export class HttpCursor extends Cursor {
     #stream: HttpStream;
     #encoding: ProtocolEncoding;
 
-    #reader: any | undefined;
+    #reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     #queue: ByteQueue;
     #closed: Error | undefined;
     #done: boolean;
@@ -40,10 +40,7 @@ export class HttpCursor extends Cursor {
             throw new ProtoError("No response body for cursor request");
         }
 
-        // node-fetch do not fully support WebStream API, especially getReader() function
-        // see https://github.com/node-fetch/node-fetch/issues/387
-        // so, we are using async iterator which behaves similarly here instead
-        this.#reader = (response.body as any)[Symbol.asyncIterator]();
+        this.#reader = response.body.getReader();
         const respBody = await this.#nextItem(json_CursorRespBody, protobuf_CursorRespBody);
         if (respBody === undefined) {
             throw new ProtoError("Empty response to cursor request");
@@ -70,7 +67,7 @@ export class HttpCursor extends Cursor {
         this.#stream._cursorClosed(this);
 
         if (this.#reader !== undefined) {
-            this.#reader.return();
+            this.#reader.cancel();
         }
     }
 
@@ -107,7 +104,7 @@ export class HttpCursor extends Cursor {
                 throw new InternalError("Attempted to read from HTTP cursor before it was opened");
             }
 
-            const { value, done } = await this.#reader.next();
+            const { value, done } = await this.#reader.read();
             if (done && this.#queue.length === 0) {
                 this.#done = true;
             } else if (done) {
