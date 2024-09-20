@@ -1,6 +1,3 @@
-import type { fetch } from "cross-fetch";
-import { Request, Headers } from "cross-fetch";
-
 import type { ProtocolEncoding } from "../client.js";
 import type { Cursor } from "../cursor.js";
 import type * as jsone from "../encoding/json/encode.js";
@@ -464,7 +461,7 @@ async function errorFromResponse(resp: Response): Promise<Error> {
     let message = `Server returned HTTP status ${resp.status}`;
 
     if (respType === "application/json") {
-        const respBody = await resp.json();
+        const respBody = await resp.json() as any;
         if ("message" in respBody) {
             return errorFromProto(respBody as proto.Error);
         }
