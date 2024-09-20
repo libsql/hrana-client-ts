@@ -461,7 +461,7 @@ async function errorFromResponse(resp: Response): Promise<Error> {
     let message = `Server returned HTTP status ${resp.status}`;
 
     if (respType === "application/json") {
-        const respBody = await resp.json();
+        const respBody = await resp.json() as any;
         if ("message" in respBody) {
             return errorFromProto(respBody as proto.Error);
         }
