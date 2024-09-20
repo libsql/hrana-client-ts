@@ -46,7 +46,6 @@
   },
   "dependencies": {
     "@libsql/isomorphic-ws": "^0.1.5",
-    "cross-fetch": "^4.0.0",
     "js-base64": "^3.7.5",
     "node-fetch": "^3.3.2"
   },

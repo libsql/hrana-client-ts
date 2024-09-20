@@ -1,6 +1,3 @@
-import type { fetch } from "cross-fetch";
-import { Request, Headers } from "cross-fetch";
-
 import type { ProtocolEncoding } from "../client.js";
 import type { Cursor } from "../cursor.js";
 import type * as jsone from "../encoding/json/encode.js";

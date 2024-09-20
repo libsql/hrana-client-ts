@@ -1,5 +1,3 @@
-import { fetch, Request } from "cross-fetch";
-
 import type { ProtocolVersion, ProtocolEncoding } from "../client.js";
 import { Client } from "../client.js";
 import { ClientError, ClosedError, ProtocolVersionError } from "../errors.js";

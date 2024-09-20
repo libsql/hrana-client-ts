@@ -8,8 +8,6 @@ import { WsClient } from "./ws/client.js";
 import { ProtocolVersion } from "./client.js";
 
 export { WebSocket } from "@libsql/isomorphic-ws";
-export type { Response } from "cross-fetch";
-export { fetch, Request, Headers } from "cross-fetch";
 
 export type { ProtocolVersion, ProtocolEncoding } from "./client.js";
 export { Client } from "./client.js";
@@ -49,8 +47,7 @@ export function openWs(url: string | URL, jwt?: string, protocolVersion: Protoco
 /** Open a Hrana client over HTTP connected to the given `url`.
  *
  * If the `customFetch` argument is passed and not `undefined`, it is used in place of the `fetch` function
- * from `cross-fetch`. This function is always called with a `Request` object from
- * `cross-fetch`.
+ * from global scope. This function is always called with a `Request` object from global scope.
  */
 export function openHttp(url: string | URL, jwt?: string, customFetch?: unknown | undefined, protocolVersion: ProtocolVersion = 2): HttpClient {
     return new HttpClient(url instanceof URL ? url : new URL(url), jwt, customFetch, protocolVersion);
