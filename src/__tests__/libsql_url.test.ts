@@ -1,3 +1,4 @@
+import { assert, describe, expect, it, test } from 'vitest'
 import * as hrana from "..";
 
 describe("parseLibsqlUrl()", () => {
