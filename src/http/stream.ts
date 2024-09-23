@@ -329,8 +329,7 @@ export class HttpStream extends Stream implements SqlOwner {
         let promise;
         try {
             const request = createRequest();
-            const fetch = this.#fetch;
-            promise = fetch(request);
+            promise = this.#fetchWithRetry(request);
         } catch (error) {
             promise = Promise.reject(error);
         }
@@ -353,6 +352,20 @@ export class HttpStream extends Stream implements SqlOwner {
         }).finally(() => {
             this.#flushing = false;
             this.#flushQueue();
+        });
+    }
+
+    #fetchWithRetry(request: Request, retryCount: number = 3, backoff: number = 100): Promise<Response> {
+        const fetch = this.#fetch;
+        return fetch(request).catch((error) => {
+            if (isRetryableError(error)) {
+                if (retryCount > 0) {
+                    return new Promise((resolve) => setTimeout(resolve, backoff)).then(() => {
+                        return this.#fetchWithRetry(request, retryCount - 1, backoff * 2);
+                    });
+                }
+            }
+            return Promise.reject(error);
         });
     }
 
@@ -415,6 +428,15 @@ export class HttpStream extends Stream implements SqlOwner {
 
         return new Request(url.toString(), {method: "POST", headers, body: bodyData});
     }
+}
+
+function isRetryableError(error: any): boolean {
+    if (!error.errno) {
+        return false;
+    }
+    return error.errno === "EPIPE"
+        || error.errno === "ECONNREFUSED"
+        || error.errno === "ECONNRESET";
 }
 
 function handlePipelineResponse(pipeline: Array<PipelineEntry>, respBody: proto.PipelineRespBody): void {
