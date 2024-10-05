@@ -1,5 +1,5 @@
 import { Batch } from "./batch.js";
-import type { Client } from "./client.js";
+import type { Client, ClientConfig } from "./client.js";
 import type { Cursor } from "./cursor.js";
 import type { DescribeResult } from "./describe.js";
 import { describeResultFromProto } from "./describe.js";
@@ -18,8 +18,9 @@ import type { IntMode } from "./value.js";
 /** A stream for executing SQL statements (a "database connection"). */
 export abstract class Stream {
     /** @private */
-    constructor(intMode: IntMode) {
+    constructor(intMode: IntMode, config: ClientConfig) {
         this.intMode = intMode;
+        this.config = config;
     }
 
     /** Get the client object that this stream belongs to. */
@@ -61,10 +62,10 @@ export abstract class Stream {
     #execute<T>(
         inStmt: InStmt,
         wantRows: boolean,
-        fromProto: (result: proto.StmtResult, intMode: IntMode) => T,
+        fromProto: (result: proto.StmtResult, intMode: IntMode, config: ClientConfig) => T,
     ): Promise<T> {
         const stmt = stmtToProto(this._sqlOwner(), inStmt, wantRows);
-        return this._execute(stmt).then((r) => fromProto(r, this.intMode));
+        return this._execute(stmt).then((r) => fromProto(r, this.intMode, this.config));
     }
 
     /** Return a builder for creating and executing a batch.
@@ -120,4 +121,7 @@ export abstract class Stream {
      * This value affects the results of all operations on this stream.
      */
     intMode: IntMode;
+
+    /** Stores the client configuration. */
+    config: ClientConfig;
 }

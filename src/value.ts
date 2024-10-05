@@ -1,4 +1,4 @@
-import { ClientError, ProtoError, MisuseError } from "./errors.js";
+import { ProtoError, MisuseError } from "./errors.js";
 import type * as proto from "./shared/proto.js";
 import { impossible } from "./util.js";
 
@@ -7,6 +7,7 @@ export type Value =
     | null
     | string
     | number
+    | boolean
     | bigint
     | ArrayBuffer
 
@@ -65,7 +66,7 @@ export function valueToProto(value: InValue): proto.Value {
 const minInteger = -9223372036854775808n;
 const maxInteger = 9223372036854775807n;
 
-export function valueFromProto(value: proto.Value, intMode: IntMode): Value {
+export function valueFromProto(value: proto.Value, intMode: IntMode, colDecltype?: string, castBooleans?: boolean): Value {
     if (value === null) {
         return null;
     } else if (typeof value === "number") {
@@ -73,6 +74,9 @@ export function valueFromProto(value: proto.Value, intMode: IntMode): Value {
     } else if (typeof value === "string") {
         return value;
     } else if (typeof value === "bigint") {
+        if (castBooleans && colDecltype?.toLowerCase() === 'boolean') {
+            return Boolean(value);
+        }
         if (intMode === "number") {
             const num = Number(value);
             if (!Number.isSafeInteger(num)) {

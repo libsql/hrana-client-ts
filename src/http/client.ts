@@ -1,6 +1,6 @@
 import { fetch, Request } from "cross-fetch";
 
-import type { ProtocolVersion, ProtocolEncoding } from "../client.js";
+import type { ProtocolVersion, ProtocolEncoding, ClientConfig } from "../client.js";
 import { Client } from "../client.js";
 import { ClientError, ClosedError, ProtocolVersionError } from "../errors.js";
 
@@ -56,8 +56,8 @@ export class HttpClient extends Client {
     _endpoint: Endpoint | undefined;
 
     /** @private */
-    constructor(url: URL, jwt: string | undefined, customFetch: unknown | undefined, protocolVersion: ProtocolVersion = 2) {
-        super();
+    constructor(url: URL, jwt: string | undefined, customFetch: unknown | undefined, protocolVersion: ProtocolVersion = 2, config: ClientConfig) {
+        super(config);
         this.#url = url;
         this.#jwt = jwt;
         this.#fetch = (customFetch as typeof fetch) ?? fetch;
