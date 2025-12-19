@@ -53,6 +53,7 @@ export class HttpStream extends Stream implements SqlOwner {
     #baseUrl: string;
     #jwt: string | undefined;
     #fetch: typeof fetch;
+    #remoteEncryptionKey: string | undefined;
 
     #baton: string | undefined;
     #queue: Queue<QueueEntry>;
@@ -65,12 +66,13 @@ export class HttpStream extends Stream implements SqlOwner {
     #sqlIdAlloc: IdAlloc;
 
     /** @private */
-    constructor(client: HttpClient, baseUrl: URL, jwt: string | undefined, customFetch: typeof fetch) {
+    constructor(client: HttpClient, baseUrl: URL, jwt: string | undefined, customFetch: typeof fetch, remoteEncryptionKey?: string) {
         super(client.intMode);
         this.#client = client;
         this.#baseUrl = baseUrl.toString();
         this.#jwt = jwt;
         this.#fetch = customFetch;
+        this.#remoteEncryptionKey = remoteEncryptionKey;
 
         this.#baton = undefined;
         this.#queue = new Queue();
@@ -411,6 +413,9 @@ export class HttpStream extends Stream implements SqlOwner {
         headers.set("content-type", contentType);
         if (this.#jwt !== undefined) {
             headers.set("authorization", `Bearer ${this.#jwt}`);
+        }
+        if (this.#remoteEncryptionKey !== undefined) {
+            headers.set("x-turso-encryption-key", this.#remoteEncryptionKey);
         }
 
         return new Request(url.toString(), {method: "POST", headers, body: bodyData});

@@ -52,6 +52,6 @@ export function openWs(url: string | URL, jwt?: string, protocolVersion: Protoco
  * from `cross-fetch`. This function is always called with a `Request` object from
  * `cross-fetch`.
  */
-export function openHttp(url: string | URL, jwt?: string, customFetch?: unknown | undefined, protocolVersion: ProtocolVersion = 2): HttpClient {
-    return new HttpClient(url instanceof URL ? url : new URL(url), jwt, customFetch, protocolVersion);
+export function openHttp(url: string | URL, jwt?: string, customFetch?: unknown | undefined, remoteEncryptionKey?: string, protocolVersion: ProtocolVersion = 2): HttpClient {
+    return new HttpClient(url instanceof URL ? url : new URL(url), jwt, customFetch, remoteEncryptionKey, protocolVersion);
 }
