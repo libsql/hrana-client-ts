@@ -46,6 +46,7 @@ export class HttpClient extends Client {
     #url: URL;
     #jwt: string | undefined;
     #fetch: typeof fetch;
+    #remoteEncryptionKey: string | undefined;
 
     #closed: Error | undefined;
     #streams: Set<HttpStream>;
@@ -56,11 +57,12 @@ export class HttpClient extends Client {
     _endpoint: Endpoint | undefined;
 
     /** @private */
-    constructor(url: URL, jwt: string | undefined, customFetch: unknown | undefined, protocolVersion: ProtocolVersion = 2) {
+    constructor(url: URL, jwt: string | undefined, customFetch: unknown | undefined, remoteEncryptionKey?: string, protocolVersion: ProtocolVersion = 2) {
         super();
         this.#url = url;
         this.#jwt = jwt;
         this.#fetch = (customFetch as typeof fetch) ?? fetch;
+        this.#remoteEncryptionKey = remoteEncryptionKey;
 
         this.#closed = undefined;
         this.#streams = new Set();
@@ -112,7 +114,7 @@ export class HttpClient extends Client {
         if (this.#closed !== undefined) {
             throw new ClosedError("Client is closed", this.#closed);
         }
-        const stream = new HttpStream(this, this.#url, this.#jwt, this.#fetch);
+        const stream = new HttpStream(this, this.#url, this.#jwt, this.#fetch, this.#remoteEncryptionKey);
         this.#streams.add(stream);
         return stream;
     }

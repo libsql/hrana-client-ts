@@ -25,7 +25,7 @@ function withClient(f: (c: hrana.Client) => Promise<void>): () => Promise<void> 
         if (isWs) {
             client = hrana.openWs(url, jwt, 3);
         } else if (isHttp) {
-            client = hrana.openHttp(url, jwt, undefined, 3);
+            client = hrana.openHttp(url, jwt, undefined, undefined, 3);
         } else {
             throw new Error("expected either ws or http URL");
         }
@@ -50,7 +50,7 @@ function withWsClient(f: (c: hrana.WsClient) => Promise<void>): () => Promise<vo
 
 function withHttpClient(f: (c: hrana.HttpClient) => Promise<void>): () => Promise<void> {
     return async () => {
-        const client = hrana.openHttp(url, jwt, undefined, 3);
+        const client = hrana.openHttp(url, jwt, undefined, undefined, 3);
         try {
             await f(client);
         } finally {
@@ -878,7 +878,7 @@ for (const useCursor of [false, true]) {
                     client.close();
                 }
             } else if (isHttp) {
-                const client = hrana.openHttp(url, jwt, undefined, 3);
+                const client = hrana.openHttp(url, jwt, undefined, undefined, 3);
                 try {
                     const stream = client.openStream();
                     await f(stream, stream);
@@ -981,7 +981,7 @@ test("getVersion()", withClient(async (c) => {
             return fetch(request);
         }
 
-        const c = hrana.openHttp(url, jwt, customFetch, 3);
+        const c = hrana.openHttp(url, jwt, customFetch, undefined, 3);
         try {
             const s = c.openStream();
             const res = await s.queryValue("SELECT 1");
@@ -998,7 +998,7 @@ test("getVersion()", withClient(async (c) => {
             throw new Error("testing exception thrown from customFetch()");
         }
 
-        const c = hrana.openHttp(url, jwt, customFetch, 3);
+        const c = hrana.openHttp(url, jwt, customFetch, undefined, 3);
         try {
             const s = c.openStream();
             await expect(s.queryValue("SELECT 1")).rejects
@@ -1013,7 +1013,7 @@ test("getVersion()", withClient(async (c) => {
             return Promise.reject(new Error("testing rejection returned from customFetch()"));
         }
 
-        const c = hrana.openHttp(url, jwt, customFetch, 3);
+        const c = hrana.openHttp(url, jwt, customFetch, undefined, 3);
         try {
             const s = c.openStream();
             await expect(s.queryValue("SELECT 1")).rejects

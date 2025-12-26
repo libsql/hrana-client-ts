@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.0 -- 2025-12-19
+
+- Add support for propagating remote encryption key
+
 ## 0.8.0 -- 2024-09-16
 
 - Replace isomorphic-fetch dependency with cross-fetch
