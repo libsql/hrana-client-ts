@@ -1,5 +1,3 @@
-import { fetch, Request } from "cross-fetch";
-
 import type { ProtocolVersion, ProtocolEncoding } from "../client.js";
 import { Client } from "../client.js";
 import { ClientError, ClosedError, ProtocolVersionError } from "../errors.js";
@@ -45,7 +43,7 @@ const fallbackEndpoint: Endpoint = {
 export class HttpClient extends Client {
     #url: URL;
     #jwt: string | undefined;
-    #fetch: typeof fetch;
+    #fetch: typeof globalThis.fetch;
     #remoteEncryptionKey: string | undefined;
 
     #closed: Error | undefined;
@@ -61,7 +59,7 @@ export class HttpClient extends Client {
         super();
         this.#url = url;
         this.#jwt = jwt;
-        this.#fetch = (customFetch as typeof fetch) ?? fetch;
+        this.#fetch = (customFetch as typeof globalThis.fetch) ?? globalThis.fetch;
         this.#remoteEncryptionKey = remoteEncryptionKey;
 
         this.#closed = undefined;
@@ -145,7 +143,7 @@ export class HttpClient extends Client {
     }
 }
 
-async function findEndpoint(customFetch: typeof fetch, clientUrl: URL): Promise<Endpoint> {
+async function findEndpoint(customFetch: typeof globalThis.fetch, clientUrl: URL): Promise<Endpoint> {
     const fetch = customFetch;
     for (const endpoint of checkEndpoints) {
         const url = new URL(endpoint.versionPath, clientUrl);

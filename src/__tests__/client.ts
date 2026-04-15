@@ -1,6 +1,3 @@
-import type { Response } from "cross-fetch";
-import { fetch, Request } from "cross-fetch";
-
 import * as hrana from "..";
 
 const url = process.env.URL ?? "ws://localhost:8080";

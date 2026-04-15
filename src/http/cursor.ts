@@ -1,5 +1,3 @@
-import type { Response } from "cross-fetch";
-
 import { ByteQueue } from "../byte_queue.js";
 import type { ProtocolEncoding } from "../client.js";
 import { Cursor } from "../cursor.js";

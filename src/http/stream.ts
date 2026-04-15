@@ -1,6 +1,3 @@
-import type { fetch } from "cross-fetch";
-import { Request, Headers } from "cross-fetch";
-
 import type { ProtocolEncoding } from "../client.js";
 import type { Cursor } from "../cursor.js";
 import type * as jsone from "../encoding/json/encode.js";
@@ -52,7 +49,7 @@ export class HttpStream extends Stream implements SqlOwner {
     #client: HttpClient;
     #baseUrl: string;
     #jwt: string | undefined;
-    #fetch: typeof fetch;
+    #fetch: typeof globalThis.fetch;
     #remoteEncryptionKey: string | undefined;
 
     #baton: string | undefined;
@@ -66,7 +63,7 @@ export class HttpStream extends Stream implements SqlOwner {
     #sqlIdAlloc: IdAlloc;
 
     /** @private */
-    constructor(client: HttpClient, baseUrl: URL, jwt: string | undefined, customFetch: typeof fetch, remoteEncryptionKey?: string) {
+    constructor(client: HttpClient, baseUrl: URL, jwt: string | undefined, customFetch: typeof globalThis.fetch, remoteEncryptionKey?: string) {
         super(client.intMode);
         this.#client = client;
         this.#baseUrl = baseUrl.toString();
