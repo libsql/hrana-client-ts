@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.0 -- 2026-04-22
+
+- Remove `cross-fetch` dependency and use native `fetch`, `Request`, and `Response` globals. This package now requires an environment with a built-in Fetch API (Node 18+, modern browsers, Bun, Deno).
+
 ## 0.9.0 -- 2025-12-19
 
 - Add support for propagating remote encryption key
