@@ -89,7 +89,7 @@ const StepEndEntry: d.MessageDef<proto.StepEndEntry> = {
         }
     },
     1 (r, msg) { msg.affectedRowCount = r.uint32() },
-    2 (r, msg) { msg.lastInsertRowid = r.uint64() },
+    2 (r, msg) { msg.lastInsertRowid = r.sint64() },
 };
 
 const StepErrorEntry: d.MessageDef<proto.StepErrorEntry> = {
